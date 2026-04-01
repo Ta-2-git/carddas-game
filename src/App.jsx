@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from “react”;
-import * as THREE from “three”;
+import { useState, useEffect, useCallback, useRef } from "react";
+import * as THREE from "three";
 
 // ===== 3Dモデルパス定義 =====
 // GLBファイルを public/models/ に配置してパスを設定してください
