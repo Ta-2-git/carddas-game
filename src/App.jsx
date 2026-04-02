@@ -200,9 +200,9 @@ const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale 
 };
 
 // ===== EMBEDDED IMAGES (placeholder) =====
-const TITLE_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/title.png";
-const BATTLE_BG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/battle_bg.png";
-const IMG_CARD_GOKU = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku_card.png";
+const TITLE_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/title.png.PNG";
+const BATTLE_BG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/battle_bg.png.PNG";
+const IMG_CARD_GOKU = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku_card.png.PNG";
 const IMG_PUNCH_SHEET = "";
 const IMG_BEAM_SHEET = "";
 const PUNCH_FRAME = { w: 204.8, h: 272, count: 5 };
