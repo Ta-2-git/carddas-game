@@ -467,7 +467,6 @@ const CardBack = ({ small = false }) => {
       </div>
     );
   }
-"linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* Diamond grid pattern */}
       <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.3 }} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         {Array.from({ length: 20 }).map((_, i) => (
