@@ -483,20 +483,19 @@ const CardBack = ({ small = false }) => {
 };
 
 // ===== GOKU CARD DISPLAY =====
-const GokuCardDisplay = ({ card, selected, onClick, small = false }) => {
-  const rar = RARITY_CONFIG[card.rarity];
+const CardBack = ({ small = false }) => {
   const w = small ? 80 : 130; const h = small ? 112 : 182;
-  return (
-    <div onClick={onClick} style={{ width: w, height: h, borderRadius: 10, background: "linear-gradient(160deg, #1a0500 0%, #2d1000 60%, #1a0800 100%)", border: `2px solid ${selected ? "#fbbf24" : rar.color}`, boxShadow: selected ? `0 0 20px #fbbf24, 0 0 40px #fbbf2466` : `0 0 10px ${rar.glow}55`, cursor: "pointer", position: "relative", overflow: "hidden", transition: "all 0.2s", transform: selected ? "scale(1.06) translateY(-4px)" : "scale(1)", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 4px 4px", userSelect: "none" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, background: rar.color, color: "#000", fontSize: small ? 7 : 9, fontWeight: "900", textAlign: "center", padding: "2px 0", fontFamily: "'Courier New',monospace", letterSpacing: 1 }}>{card.rarity}</div>
-      <div style={{ marginTop: small ? 12 : 14, flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {IMG_CARD_GOKU ? <img src={IMG_CARD_GOKU} alt="孫悟空" style={{ height: small ? 60 : 100, width: "auto", objectFit: "cover", objectPosition: "center top" }} /> : <StickmanFighter card={card} size={small ? 44 : 72} />}
+  if (CARD_BACK_IMG) {
+    return (
+      <div style={{ width: w, height: h, borderRadius: 10, overflow: "hidden", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88" }}>
+        <img src={CARD_BACK_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
-      <div style={{ fontSize: small ? 7 : 9, color: "#fff", fontWeight: "700", textAlign: "center", padding: "2px 2px 0", fontFamily: "'Courier New',monospace", textShadow: "0 0 8px #f59e0b", lineHeight: 1.2 }}>{card.name}</div>
-      {!small && <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
-        <div style={{ fontSize: 8, color: "#4ade80", fontFamily: "monospace" }}>HP:{card.hp}</div>
-        <div style={{ fontSize: 8, color: "#f87171", fontFamily: "monospace" }}>ATK:{card.atk}</div>
-      </div>}
+    );
+  }
+  return (
+    <div style={{ width: w, height: h, borderRadius: 10, background: "linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontSize: 32, zIndex: 1, filter: "drop-shadow(0 0 8px #f59e0b)" }}>⭐</div>
+      <div style={{ position: "absolute", bottom: 6, fontSize: 7, color: "#f59e0b88", fontFamily: "monospace", letterSpacing: 2 }}>CARDDAS</div>
     </div>
   );
 };
