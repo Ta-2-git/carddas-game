@@ -456,10 +456,18 @@ const StickmanFighter = ({ card, isEnemy, state = "idle", size = 100 }) => {
 };
 
 // ===== CARD BACK (for gacha reveal) =====
+ const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
+
 const CardBack = ({ small = false }) => {
   const w = small ? 80 : 130; const h = small ? 112 : 182;
-  return (
-    <div style={{ width: w, height: h, borderRadius: 10, background: "linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+  if (CARD_BACK_IMG) {
+    return (
+      <div style={{ width: w, height: h, borderRadius: 10, overflow: "hidden", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88" }}>
+        <img src={CARD_BACK_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    );
+  }
+"linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* Diamond grid pattern */}
       <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.3 }} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         {Array.from({ length: 20 }).map((_, i) => (
