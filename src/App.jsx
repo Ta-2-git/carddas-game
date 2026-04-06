@@ -15,7 +15,7 @@ const MODEL_PATHS = {
 // lookAtY: 注視点の高さ（モデルのどの高さを中心に見るか）
 // rotationY: モデルの左右回転（ラジアン、Math.PI = 180度）
 const MODEL_CAMERA_SETTINGS = {
-  "c001": { cameraY: 1.2, cameraZ: 4.0, lookAtY: 0.8, rotationY: 0 },
+  "c001": { cameraY: 1.2, cameraZ: 2.0, lookAtY: 0.8, rotationY: 45 },
   // 他のキャラを追加する場合はここに設定を追加
 };
 const DEFAULT_CAMERA = { cameraY: 1.2, cameraZ: 4.0, lookAtY: 0.8, rotationY: 0 };
