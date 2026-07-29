@@ -97,8 +97,8 @@ export const CHARACTERS = {
       idle:          { file: `${R2}/goku1_idle.glb`,      loop: true },
       melee:         { file: `${R2}/Goku_Combo.glb`,      loop: false, speed: 1.0 },
       kiBlast:       { file: `${R2}/Goku_KiBlast.glb`,    loop: false },
-      ultimate:      { file: "",                          loop: false }, // かめはめ波GLBができたらここへ
-      transform:     { file: "",                          loop: false, hold: true },
+      ultimate:      { file: `${R2}/Goku_Kamehameha.glb`, loop: false },
+      transform:     { file: `${R2}/Goku_変身.glb`,        loop: false, hold: true },
       hitByMelee:    { file: `${R2}/Goku_Receive.glb`,    loop: false },
       hitByKiBlast:  { file: "",                          loop: false },
       hitByUltimate: { file: "",                          loop: false },

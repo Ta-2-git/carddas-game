@@ -12,8 +12,9 @@ import { useEffect, useRef } from "react";
 import CharacterRig from "./CharacterRig";
 import { getCharacter, normalizeMotion, MOTION } from "../data/characters";
 
-const PLAYER_X = -1.15;
-const ENEMY_X = 1.15;
+const PLAYER_X = -1.7;
+const ENEMY_X = 1.7;
+const CHAR_SCALE = 1.6; // 二回り大きく表示する倍率
 
 export default function BattleStage3D({
   playerCardId,
@@ -45,8 +46,8 @@ export default function BattleStage3D({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-    camera.position.set(0, 1.35, 4.6);
-    camera.lookAt(0, 0.85, 0);
+    camera.position.set(0, 1.6, 4.6);
+    camera.lookAt(0, 1.15, 0); // キャラ拡大分、頭が見切れないようやや上を見る
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     const dir = new THREE.DirectionalLight(0xffffff, 1.15);
@@ -57,6 +58,8 @@ export default function BattleStage3D({
     const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true });
     playerRig.root.position.x = PLAYER_X;
     enemyRig.root.position.x = ENEMY_X;
+    playerRig.root.scale.setScalar(CHAR_SCALE);
+    enemyRig.root.scale.setScalar(CHAR_SCALE);
     scene.add(playerRig.root, enemyRig.root);
     playerRig.load();
     enemyRig.load();
@@ -140,7 +143,7 @@ function spawnShot(S, shot) {
   const scale = spec.scale || 0.3;
   const startX = fromPlayer ? PLAYER_X + 0.35 : ENEMY_X - 0.35;
   const endX = fromPlayer ? ENEMY_X - 0.3 : PLAYER_X + 0.3;
-  const y = 1.05;
+  const y = 1.05 * CHAR_SCALE; // キャラの拡大に合わせて発射位置も上げる
 
   const group = new THREE.Group();
   let mesh;
