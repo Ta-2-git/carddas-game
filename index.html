@@ -15,14 +15,14 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- Three.js + GLTFLoader をCDNから読み込み -->
+    <!-- Three.js + GLTFLoader/FBXLoader をCDNから読み込み -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- FBXLoaderが内部で使う圧縮解凍ライブラリ（FBXLoaderより先に読み込む必要あり） -->
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
     <script>
-      // GLTFLoaderをwindow.THREEに登録
-      if (window.THREE && window.THREE.GLTFLoader === undefined) {
-        // GLTFLoaderはすでにTHREE名前空間に登録される
-      }
+      // GLTFLoader/FBXLoaderはすでにTHREE名前空間に登録される
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
