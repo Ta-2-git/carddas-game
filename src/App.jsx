@@ -1,114 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-
-// ===== 3Dモデルパス定義 =====
-const MODEL_PATHS = {
-  "c001": "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku1_idle.glb",
-  "c002": "", "c003": "", "c004": "", "c005": "", "c006": "",
-  "c007": "", "c008": "", "c_gotenks": "",
-  "e001": "", "e002": "", "e003": "",
-};
-
-// ===== 3Dモデルコンポーネント =====
-// ===== モデルのカメラ・位置設定（キャラごとに調整可能）=====
-// cameraY: カメラの高さ（大きいほど上から見る）
-// cameraZ: カメラの距離（大きいほど遠い）
-// lookAtY: 注視点の高さ（モデルのどの高さを中心に見るか）
-// rotationY: モデルの左右回転（ラジアン、Math.PI = 180度）
-const MODEL_CAMERA_SETTINGS = {
-  "c001": { cameraY: 1.2, cameraZ: 2.7, lookAtY: 0.8, rotationY: 45 },
-  // 他のキャラを追加する場合はここに設定を追加
-};
-const DEFAULT_CAMERA = { cameraY: 1.2, cameraZ: 4.0, lookAtY: 0.8, rotationY: 0 };
-
-const CharacterModel3D = ({ modelPath, animState = "idle", isEnemy = false, size = 110, cardId = "" }) => {
-  const mountRef = useRef(null);
-  const rendererRef = useRef(null);
-  const mixerRef = useRef(null);
-  const clockRef = useRef(null);
-  const frameRef = useRef(null);
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
-  const modelRef = useRef(null);
-
-  const camSettings = MODEL_CAMERA_SETTINGS[cardId] || DEFAULT_CAMERA;
-
-  useEffect(() => {
-    if (!modelPath || !mountRef.current) return;
-    let cancelled = false;
-
-    const THREE = window.THREE;
-    if (!THREE) return;
-
-    const w = size, h = size * 1.4;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setClearColor(0x000000, 0);
-    rendererRef.current = renderer;
-    if (mountRef.current) mountRef.current.appendChild(renderer.domElement);
-
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-    camera.position.set(isEnemy ? -0.3 : 0.3, camSettings.cameraY, camSettings.cameraZ);
-    camera.lookAt(0, camSettings.lookAtY, 0);
-    cameraRef.current = camera;
-
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-    dir.position.set(2, 4, 3);
-    scene.add(dir);
-
-    const clock = new THREE.Clock();
-    clockRef.current = clock;
-
-    const loader = new THREE.GLTFLoader();
-    loader.load(modelPath, (gltf) => {
-      if (cancelled) return;
-      const model = gltf.scene;
-      // 左右反転（敵）＋回転設定
-      if (isEnemy) model.rotation.y = Math.PI + camSettings.rotationY;
-      else model.rotation.y = camSettings.rotationY;
-      modelRef.current = model;
-      scene.add(model);
-
-      if (gltf.animations.length > 0) {
-        const mixer = new THREE.AnimationMixer(model);
-        mixerRef.current = mixer;
-        const action = mixer.clipAction(gltf.animations[0]);
-        action.play();
-      }
-    }, undefined, (err) => console.warn("GLB load error:", err));
-
-    const animate = () => {
-      frameRef.current = requestAnimationFrame(animate);
-      if (mixerRef.current && clockRef.current) {
-        mixerRef.current.update(clockRef.current.getDelta());
-      }
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frameRef.current);
-      renderer.dispose();
-      if (mountRef.current && renderer.domElement.parentNode === mountRef.current) {
-        mountRef.current.removeChild(renderer.domElement);
-      }
-    };
-  }, [modelPath, isEnemy, size, cardId]);
-
-  return <div ref={mountRef} style={{ width: size, height: size * 1.4, display: "inline-block" }} />;
-};
+import CharacterModel3D from "./three/CharacterModel3D";
+import BattleStage3D from "./three/BattleStage3D";
+import { has3DModel, MOTION } from "./data/characters";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
-const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1 }) => {
-  const modelPath = MODEL_PATHS[card.id] || "";
-  if (modelPath) {
-    return <CharacterModel3D modelPath={modelPath} animState={animState} isEnemy={isEnemy} size={size} cardId={card.id} />;
+const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
+  if (has3DModel(card.id)) {
+    return (
+      <CharacterModel3D
+        cardId={card.id}
+        animState={animState}
+        isEnemy={isEnemy}
+        transformed={transformed}
+        size={size}
+      />
+    );
   }
   if (card.isGoku) return <GokuFighter animState={animState} isEnemy={isEnemy} scale={scale} />;
   return <StickmanFighter card={card} isEnemy={isEnemy} size={size} state={animState} />;
@@ -1061,6 +967,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [battleLog, setBattleLog] = useState([]);
   const [playerAnim, setPlayerAnim] = useState(startsWithKaioken ? "kaioken_idle" : "idle");
   const [enemyAnim, setEnemyAnim] = useState("idle");
+  const [shot, setShot] = useState(null);
   const [damageNum, setDamageNum] = useState(null);
   const [damagePos, setDamagePos] = useState("enemy");
   const [currentMove, setCurrentMove] = useState(null);
@@ -1204,7 +1111,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       }
       setRouletteState(null);
       if (isFirstWin && attacker === "player") {
-        setKaiokenActive(true); kaiokenActiveRef.current = true; setPlayerAnim("kaioken_idle");
+        setKaiokenActive(true); kaiokenActiveRef.current = true; setPlayerAnim(MOTION.TRANSFORM);
         setBattleLog(l => [...l, `界王拳！！ ATK×1.5！`]);
         setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, true); }, 1200);
       } else { setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 100); }
@@ -1444,7 +1351,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       return;
     }
     if (attacker === "player") {
-      if (playerCard.isGoku) { if (move.id === "rock_kamehameha") setPlayerAnim("beam"); else if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); } else setPlayerAnim("attack");
+      if (playerCard.isGoku) { if (move.id === "rock_kamehameha") { setPlayerAnim("beam"); setShot({ key: Date.now(), from: "player", kind: "ultimate" }); } else if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); } else setPlayerAnim("attack");
       setEnemyAnim("idle");
     } else { setEnemyAnim("attack"); setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "idle"); }
     setTimeout(() => {
@@ -1569,26 +1476,30 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         {dragonBurstPhase === "janken" && (<div style={{ position: "absolute", top: 10, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 10 }}><div style={{ background: "rgba(0,0,0,0.75)", border: "2px solid #ef4444", borderRadius: 20, padding: "4px 16px", fontFamily: "monospace", fontWeight: "900", fontSize: 13, color: "#fbbf24", letterSpacing: 2 }}>🔥 ATK × {dragonBurstMultiplier.toFixed(1)}</div></div>)}
         <div style={{ position: "absolute", bottom: 10, left: 10, right: 10, height: 2, background: "linear-gradient(90deg,transparent,rgba(180,120,60,0.5),rgba(180,120,60,0.5),transparent)" }} />
 
-        <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", transform: `translateX(${playerOffset + playerClashOffset}px)`, transition: "transform 0.4s ease" }}>
-          <div style={{ opacity: playerVisible ? 1 : 0, animation: playerVisible && enterPhase === "player_land" ? "charLand 0.4s cubic-bezier(0.22,1,0.36,1) forwards" : "none" }}>
-            <CharacterFighter card={playerCard} animState={dragonBurstPhase === "janken" ? "dash" : playerAnim} size={110} scale={0.85} />
-          </div>
-          {damagePos === "player" && damageNum && <div style={{ position: "absolute", top: -20, right: -10, fontSize: 22, fontWeight: "900", color: "#ef4444", animation: "damageFloat 1s ease forwards", textShadow: "0 0 10px #ef4444" }}>-{damageNum}</div>}
-        </div>
+        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
+          <BattleStage3D
+            playerCardId={playerCard.id}
+            enemyCardId={enemyData.id}
+            playerAnim={dragonBurstPhase === "janken" ? "dash" : playerAnim}
+            enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
+            playerTransformed={kaiokenActive}
+            enemyTransformed={false}
+            shot={shot}
+            onShotHit={() => setShot(null)}
+            width={360}
+            height={240}
+          />
 
-        <div style={{ textAlign: "center", minWidth: 80, position: "relative" }}>
           {clashSparks && (dragonBurstPhase === "janken" || dragonBurstPhase === "clash") && (
-            <div style={{ position: "relative", width: 70, height: 80, overflow: "visible" }}>
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 22, height: 22, borderRadius: "50%", background: "radial-gradient(circle,#fff 0%,#fbbf24 40%,#f97316 70%,transparent 100%)", boxShadow: "0 0 12px 6px #fbbf2488", animation: "coreFlash 0.18s ease-in-out infinite alternate" }} />
-            </div>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 22, height: 22, borderRadius: "50%", background: "radial-gradient(circle,#fff 0%,#fbbf24 40%,#f97316 70%,transparent 100%)", boxShadow: "0 0 12px 6px #fbbf2488", animation: "coreFlash 0.18s ease-in-out infinite alternate" }} />
           )}
-          {damagePos === "enemy" && damageNum && <div style={{ fontSize: 22, fontWeight: "900", color: "#f59e0b", animation: "damageFloat 1s ease forwards", textShadow: "0 0 10px #f59e0b" }}>-{damageNum}</div>}
-        </div>
 
-        <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", transform: `translateX(${enemyClashOffset}px)`, transition: "transform 0.4s ease" }}>
-          <div style={{ opacity: enemyVisible ? 1 : 0, animation: enemyVisible && enterPhase === "enemy_land" ? "charLand 0.4s cubic-bezier(0.22,1,0.36,1) forwards" : "none" }}>
-            <CharacterFighter card={enemyData} animState={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")} isEnemy size={110} />
-          </div>
+          {damagePos === "player" && damageNum && (
+            <div style={{ position: "absolute", top: 10, left: 20, fontSize: 22, fontWeight: "900", color: "#ef4444", animation: "damageFloat 1s ease forwards", textShadow: "0 0 10px #ef4444" }}>-{damageNum}</div>
+          )}
+          {damagePos === "enemy" && damageNum && (
+            <div style={{ position: "absolute", top: 10, right: 20, fontSize: 22, fontWeight: "900", color: "#f59e0b", animation: "damageFloat 1s ease forwards", textShadow: "0 0 10px #f59e0b" }}>-{damageNum}</div>
+          )}
         </div>
       </div>
 
