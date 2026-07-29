@@ -76,6 +76,12 @@ export default class CharacterRig {
 
     this._loadAuras(); // オーラは待たずに裏で読み込む
 
+    // 他のモーションも裏で先読みしておく（技を出す瞬間に読み込み待ちで
+    // 出遅れないように。FBXはファイルサイズが大きく数秒かかることがあるため）
+    for (const name of Object.values(MOTION)) {
+      if (name !== MOTION.IDLE) this._loadMotion(name);
+    }
+
     if (this.onReady) this.onReady(this);
     return true;
   }

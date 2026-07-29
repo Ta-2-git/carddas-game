@@ -108,9 +108,9 @@ export const CHARACTERS = {
     ultimate: { model: "", color: "#7fd4ff", effect: "beam",   scale: 1.0,  speed: 9 },
 
     aura: {
-      normal:      { enabled: true, ...AURA_PRESETS.white,  scale: 1.00, opacity: 0.55, yOffset: 0 },
-      transformed: { enabled: true, ...AURA_PRESETS.yellow, scale: 1.18, opacity: 0.95, yOffset: 0, startFrame: 42 },
-      reverted:    { enabled: true, ...AURA_PRESETS.white,  scale: 1.00, opacity: 0.55, yOffset: 0 },
+      normal:      { enabled: false, ...AURA_PRESETS.white, scale: 1.00, opacity: 0.55, yOffset: 0 },
+      transformed: { enabled: true,  ...AURA_PRESETS.red,   scale: 1.18, opacity: 0.95, yOffset: 0, startFrame: 42 },
+      reverted:    { enabled: false, ...AURA_PRESETS.white, scale: 1.00, opacity: 0.55, yOffset: 0 },
     },
   },
 
