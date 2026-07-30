@@ -965,7 +965,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [timer, setTimer] = useState(15);
   const [timerActive, setTimerActive] = useState(false);
   const [battleLog, setBattleLog] = useState([]);
-  const [playerAnim, setPlayerAnim] = useState(startsWithKaioken ? "kaioken_idle" : "idle");
+  const [playerAnim, setPlayerAnim] = useState(startsWithKaioken ? MOTION.TRANSFORM : "idle");
   const [enemyAnim, setEnemyAnim] = useState("idle");
   const [shot, setShot] = useState(null);
   const [damageNum, setDamageNum] = useState(null);
@@ -1484,6 +1484,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
             playerTransformed={kaiokenActive}
             enemyTransformed={false}
+            playerAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}
             onShotHit={() => setShot(null)}
             width={360}

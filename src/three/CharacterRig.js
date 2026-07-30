@@ -40,6 +40,7 @@ export default class CharacterRig {
 
     this.disposed = false;
     this._pending = new Set();
+    this._loopOverride = false; // true の間、1回再生のモーションも終わったら繰り返す
   }
 
   // ---------------------------------------------------------
@@ -71,7 +72,9 @@ export default class CharacterRig {
     const rot = (rotDeg * Math.PI) / 180;
     this.model.rotation.y = this.isEnemy ? Math.PI + rot : rot;
 
-    await this._loadMotion(MOTION.IDLE);
+    // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
+    // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
+    // オーラや他モーションの先読みを並行して進める
     this.play(MOTION.IDLE, { immediate: true });
 
     this._loadAuras(); // オーラは待たずに裏で読み込む
@@ -155,14 +158,20 @@ export default class CharacterRig {
     });
   }
 
-  /** 1回再生のモーションが終わったら待機へ戻す */
+  /** 1回再生のモーションが終わったら待機へ戻す（loopOverride中は繰り返す） */
   _handleFinished(action) {
     const name = Object.keys(this.actions).find((k) => this.actions[k] === action);
     if (!name) return;
+    if (this._loopOverride) { this.play(name, { force: true, immediate: true }); return; }
     const meta = (this._motionMeta || {})[name] || {};
     if (meta.hold) return;         // 最後のポーズで止める設定
     if (name === MOTION.IDLE) return;
     this.play(MOTION.IDLE);
+  }
+
+  /** ドラゴンバースト中など、1回再生のモーションを終了まで繰り返させたい時に使います */
+  setLoopOverride(active) {
+    this._loopOverride = Boolean(active);
   }
 
   // ---------------------------------------------------------

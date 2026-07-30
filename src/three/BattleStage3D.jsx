@@ -23,6 +23,8 @@ export default function BattleStage3D({
   enemyAnim = "idle",
   playerTransformed = false,
   enemyTransformed = false,
+  playerAnimLoop = false, // trueの間、1回再生のモーションも終わったら繰り返す（ドラゴンバースト用）
+  enemyAnimLoop = false,
   shot = null,          // { key, from: "player"|"enemy", kind: "kiBlast"|"ultimate" }
   onShotHit = null,     // 着弾時に呼ばれます
   width = 360,
@@ -102,6 +104,17 @@ export default function BattleStage3D({
     const rig = stateRef.current.enemyRig;
     if (rig) rig.play(normalizeMotion(enemyAnim));
   }, [enemyAnim]);
+
+  // ---------- ループ指定（ドラゴンバースト中の近接攻撃モーション等） ----------
+  useEffect(() => {
+    const rig = stateRef.current.playerRig;
+    if (rig) rig.setLoopOverride(playerAnimLoop);
+  }, [playerAnimLoop]);
+
+  useEffect(() => {
+    const rig = stateRef.current.enemyRig;
+    if (rig) rig.setLoopOverride(enemyAnimLoop);
+  }, [enemyAnimLoop]);
 
   // ---------- 変身状態 ----------
   useEffect(() => {

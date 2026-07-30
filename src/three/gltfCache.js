@@ -26,6 +26,39 @@ function getFBXLoader() {
   return new THREE.FBXLoader();
 }
 
+// このプロジェクトのFBXモーションはZ-up設定のまま書き出されており、
+// 素体（Y-up）にそのまま適用すると前方向が下方向にズレて再生されます。
+// ルートボーン(Hips)のposition/quaternionだけをX軸-90度分補正することで、
+// 子ボーンはFKで連動して正しい向きになります。
+const FBX_ROOT_BONE = "Hips";
+
+function fixFbxUpAxis(clip) {
+  const THREE = window.THREE;
+  if (!THREE) return clip;
+  const R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  const Rinv = R.clone().invert();
+  const v = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+
+  for (const track of clip.tracks) {
+    if (track.name === `${FBX_ROOT_BONE}.position`) {
+      for (let i = 0; i < track.times.length; i++) {
+        const o = i * 3;
+        v.set(track.values[o], track.values[o + 1], track.values[o + 2]).applyQuaternion(R);
+        track.values[o] = v.x; track.values[o + 1] = v.y; track.values[o + 2] = v.z;
+      }
+    } else if (track.name === `${FBX_ROOT_BONE}.quaternion`) {
+      for (let i = 0; i < track.times.length; i++) {
+        const o = i * 4;
+        q.set(track.values[o], track.values[o + 1], track.values[o + 2], track.values[o + 3]);
+        const qn = R.clone().multiply(q).multiply(Rinv);
+        track.values[o] = qn.x; track.values[o + 1] = qn.y; track.values[o + 2] = qn.z; track.values[o + 3] = qn.w;
+      }
+    }
+  }
+  return clip;
+}
+
 /** GLB/FBX を読み込んで { scene, animations } を返します（キャッシュなし） */
 export function loadGLTF(url) {
   return new Promise((resolve, reject) => {
@@ -34,7 +67,10 @@ export function loadGLTF(url) {
     if (isFBX(url)) {
       const loader = getFBXLoader();
       if (!loader) { reject(new Error("THREE.FBXLoader が読み込まれていません")); return; }
-      loader.load(url, (object) => resolve({ scene: object, animations: object.animations || [] }), undefined, reject);
+      loader.load(url, (object) => {
+        (object.animations || []).forEach(fixFbxUpAxis);
+        resolve({ scene: object, animations: object.animations || [] });
+      }, undefined, reject);
       return;
     }
 
