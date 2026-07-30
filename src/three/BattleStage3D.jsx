@@ -151,6 +151,8 @@ export default function BattleStage3D({
       const availH = Math.round(height || el.clientHeight);
       const h = Math.min(availH, Math.round(w / MIN_ASPECT));
       if (w < 2 || h < 2) return;
+      if (w === S.lastW && h === S.lastH) return; // 変化がなければ何もしない
+      S.lastW = w; S.lastH = h;
       applyLayout(S, w, h);
     };
 
@@ -159,8 +161,12 @@ export default function BattleStage3D({
     if (ro) ro.observe(el);
     window.addEventListener("resize", apply);
     window.addEventListener("orientationchange", apply);
+    // 端末や描画タイミングによってはイベントを取りこぼすことがあるため、
+    // 保険として定期的にもサイズを見に行きます（変化がなければ即return）
+    const poll = setInterval(apply, 400);
     return () => {
       if (ro) ro.disconnect();
+      clearInterval(poll);
       window.removeEventListener("resize", apply);
       window.removeEventListener("orientationchange", apply);
     };
