@@ -12,28 +12,50 @@ import { useEffect, useRef } from "react";
 import CharacterRig from "./CharacterRig";
 import { getCharacter, normalizeMotion, MOTION } from "../data/characters";
 
-const PLAYER_X = -1.7;
-const ENEMY_X = 1.7;
 const CHAR_SCALE = 1.6; // 二回り大きく表示する倍率
 
-// ---- カメラの収まり設定 ----------------------------------------
-//  端末ごとに画面比率が違っても「2人とも見切れない」ようにするため、
-//  必要な表示範囲を世界座標で決めて、そこから距離を逆算します。
+// ---- 画面比率への最適化 ----------------------------------------
+//  スマホ（縦長）とPC（横長）で使える形が大きく違うため、
+//   1) canvasが縦長になりすぎないように高さを制限する
+//   2) 横幅が足りない時は2人の間隔を詰める
+//   3) 必要な表示範囲からカメラ距離を逆算する
+//  の3段構えで、どちらでも見切れず・小さくなりすぎないようにします。
 const FOV_Y = 38;
-const FIT_HALF_W = 2.65; // 左右に必要な半幅（キャラ位置±1.7 ＋ 体の幅と余白）
-const FIT_HALF_H = 1.15; // 上下に必要な半高
+const MIN_ASPECT = 1.1;    // これより縦長のcanvasにはしない
+const SPREAD_WIDE = 1.7;   // 横に余裕がある時の立ち位置（±）
+const SPREAD_NARROW = 1.05; // 縦長画面で詰めた時の立ち位置（±）
+const HALF_W_MARGIN = 0.8;  // 立ち位置に足す体の幅＋余白
+const FIT_HALF_H = 1.15;    // 上下に必要な半高
 const FIT_CENTER_Y = 1.05;
 
+/** 画面比率から2人の立ち位置（中心からの距離）を決めます */
+function spreadFor(aspect) {
+  const t = Math.min(1, Math.max(0, (aspect - 0.9) / (1.8 - 0.9)));
+  return SPREAD_NARROW + (SPREAD_WIDE - SPREAD_NARROW) * t;
+}
+
 /** 画面比率に合わせてカメラを引き、2人とも収まる距離に置きます */
-function frameCamera(camera, aspect) {
+function frameCamera(camera, aspect, halfW) {
   const tanY = Math.tan((FOV_Y * Math.PI) / 180 / 2);
-  const distV = FIT_HALF_H / tanY;                // 縦に収まる距離
-  const distH = FIT_HALF_W / (tanY * aspect);     // 横に収まる距離
-  const dist = Math.max(distV, distH);            // 厳しい方に合わせる
+  const distV = FIT_HALF_H / tanY;             // 縦に収まる距離
+  const distH = halfW / (tanY * aspect);       // 横に収まる距離
+  const dist = Math.max(distV, distH);         // 厳しい方に合わせる
   camera.aspect = aspect;
   camera.position.set(0, FIT_CENTER_Y + 0.3, dist);
   camera.lookAt(0, FIT_CENTER_Y, 0);
   camera.updateProjectionMatrix();
+}
+
+/** canvasサイズ・立ち位置・カメラをまとめて画面比率に合わせます */
+function applyLayout(S, w, h) {
+  if (!S.renderer || !S.camera) return;
+  const aspect = w / h;
+  const spread = spreadFor(aspect);
+  S.spread = spread;
+  if (S.playerRig) S.playerRig.root.position.x = -spread;
+  if (S.enemyRig) S.enemyRig.root.position.x = spread;
+  S.renderer.setSize(w, h);
+  frameCamera(S.camera, aspect, spread + HALF_W_MARGIN);
 }
 
 export default function BattleStage3D({
@@ -72,7 +94,6 @@ export default function BattleStage3D({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(FOV_Y, w0 / h0, 0.1, 100);
-    frameCamera(camera, w0 / h0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     const dir = new THREE.DirectionalLight(0xffffff, 1.15);
@@ -82,8 +103,6 @@ export default function BattleStage3D({
     // 自キャラは敵(+X側)を、敵キャラは自キャラ(-X側)を向くように固定する
     const playerRig = new CharacterRig({ cardId: playerCardId, isEnemy: false, facingYDeg: 90 });
     const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90 });
-    playerRig.root.position.x = PLAYER_X;
-    enemyRig.root.position.x = ENEMY_X;
     playerRig.root.scale.setScalar(CHAR_SCALE);
     enemyRig.root.scale.setScalar(CHAR_SCALE);
     scene.add(playerRig.root, enemyRig.root);
@@ -91,6 +110,7 @@ export default function BattleStage3D({
     enemyRig.load();
 
     Object.assign(S, { THREE, renderer, scene, camera, playerRig, enemyRig, shots: [] });
+    applyLayout(S, w0, h0); // 立ち位置とカメラを画面比率に合わせる
 
     const clock = new THREE.Clock();
     const tick = () => {
@@ -127,10 +147,11 @@ export default function BattleStage3D({
       const S = stateRef.current;
       if (!S.renderer || !S.camera) return;
       const w = Math.round(width || el.clientWidth);
-      const h = Math.round(height || el.clientHeight);
+      // 縦長になりすぎると横並びの対戦が見づらいので高さを制限します
+      const availH = Math.round(height || el.clientHeight);
+      const h = Math.min(availH, Math.round(w / MIN_ASPECT));
       if (w < 2 || h < 2) return;
-      S.renderer.setSize(w, h);
-      frameCamera(S.camera, w / h);
+      applyLayout(S, w, h);
     };
 
     apply();
@@ -186,15 +207,23 @@ export default function BattleStage3D({
     spawnShot(S, shot);
   }, [shot && shot.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // サイズ未指定のときは、親（position:relative）を絶対配置で埋めます。
+  // height:"100%" はフレックスアイテム上だと解決されず潰れることがあるため、
+  // 絶対配置にして確実に親いっぱいへ広げています。
+  const fill = !width && !height;
   return (
     <div
       ref={mountRef}
-      style={{
-        width: width || "100%",
-        height: height || "100%",
-        minHeight: 180,
-        lineHeight: 0, // canvas下の余白を出さない
-      }}
+      style={
+        fill
+          ? {
+              position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
+              // 高さを制限した分の余白は上に出し、キャラは地面側（下）に揃える
+              display: "flex", alignItems: "flex-end", justifyContent: "center",
+              lineHeight: 0,
+            }
+          : { width, height, lineHeight: 0 }
+      }
     />
   );
 }
@@ -215,8 +244,10 @@ function spawnShot(S, shot) {
 
   const color = new THREE.Color(spec.color || "#ffffff");
   const scale = spec.scale || 0.3;
-  const startX = fromPlayer ? PLAYER_X + 0.35 : ENEMY_X - 0.35;
-  const endX = fromPlayer ? ENEMY_X - 0.3 : PLAYER_X + 0.3;
+  // 立ち位置は画面比率で変わるので、その時の値を使います
+  const spread = S.spread || SPREAD_WIDE;
+  const startX = fromPlayer ? -spread + 0.35 : spread - 0.35;
+  const endX = fromPlayer ? spread - 0.3 : -spread + 0.3;
   const y = 1.05 * CHAR_SCALE; // キャラの拡大に合わせて発射位置も上げる
 
   const group = new THREE.Group();
