@@ -18,15 +18,21 @@
 const R2 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev";
 
 // -------------------------------------------------------------
-// オーラのプリセット（Blenderで書き出した5色）
-// 使い回すので、ここで名前を付けておきます。
+// オーラのプリセット（色だけ指定すればOK）
+// -------------------------------------------------------------
+//  オーラは GLB を使わず、Three.js のシェーダーで生成します
+//  （src/three/KiAura.js）。ここで色を決めるだけで見た目が変わります。
+//    color     … オーラ本体の色（中心は白く光り、外側がこの色になります）
+//    boltColor … 内側に走る稲妻の色
+//  独自の色にしたい場合は、プリセットを使わず
+//  { enabled: true, color: "#xxxxxx", boltColor: "#xxxxxx" } と直接書けます。
 // -------------------------------------------------------------
 export const AURA_PRESETS = {
-  white:  { model: `${R2}/KiAura_White.glb`,  color: "#e8f2ff" },
-  yellow: { model: `${R2}/KiAura_Yellow.glb`, color: "#ffcc11" },
-  red:    { model: `${R2}/KiAura_Red.glb`,    color: "#ff2010" },
-  blue:   { model: `${R2}/KiAura_Blue.glb`,   color: "#1058ff" },
-  purple: { model: `${R2}/KiAura_Purple.glb`, color: "#9e1aff" },
+  white:  { color: "#e8f2ff", boltColor: "#bfe9ff" },
+  yellow: { color: "#ffcc11", boltColor: "#7fdfff" },
+  red:    { color: "#ff2010", boltColor: "#ffd8a0" },
+  blue:   { color: "#1058ff", boltColor: "#a8ecff" },
+  purple: { color: "#9e1aff", boltColor: "#e6b4ff" },
 };
 
 // -------------------------------------------------------------
@@ -53,6 +59,7 @@ export const AURA_PRESETS = {
 //  aura.reverted    … 変身解除後のオーラ
 //
 //  オーラ共通:  enabled(出すか) / scale(大きさ) / opacity(濃さ) / yOffset(高さ調整)
+//               color(本体の色) / boltColor(稲妻の色)
 // -------------------------------------------------------------
 
 // 未設定キャラに使う既定値
@@ -109,10 +116,12 @@ export const CHARACTERS = {
     kiBlast:  { model: "", color: "#ffd21a", effect: "sphere", scale: 0.30, speed: 6 },
     ultimate: { model: "", color: "#7fd4ff", effect: "beam",   scale: 1.0,  speed: 9 },
 
+    // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
+    // 界王拳が続くあいだはずっと出したままにします。
     aura: {
-      normal:      { enabled: false, ...AURA_PRESETS.white, scale: 1.00, opacity: 0.55, yOffset: 0 },
-      transformed: { enabled: true,  ...AURA_PRESETS.red,   scale: 1.18, opacity: 0.95, yOffset: 0, startFrame: 42 },
-      reverted:    { enabled: false, ...AURA_PRESETS.white, scale: 1.00, opacity: 0.55, yOffset: 0 },
+      normal:      { enabled: false },
+      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.05, opacity: 0.95, yOffset: 0, startFrame: 18 },
+      reverted:    { enabled: false },
     },
   },
 

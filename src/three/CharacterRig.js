@@ -11,6 +11,7 @@
 // =============================================================
 
 import { loadGLTF, loadClips, pickClip } from "./gltfCache";
+import { createKiAura } from "./KiAura";
 import { getCharacter, MOTION } from "../data/characters";
 
 const FADE = 0.18; // モーション切り替えにかける秒数
@@ -190,19 +191,26 @@ export default class CharacterRig {
       const a = (this.config.aura || {})[mode];
       if (!a || !a.enabled) continue;
 
+      // GLBが指定されていればそれを使い、無ければシェーダーでオーラを生成します
       let obj = null;
       if (a.model) {
         try {
           const gltf = await loadGLTF(a.model);
           obj = gltf.scene;
+          this._tintAura(obj, a);
         } catch (e) {
           console.warn("[CharacterRig] オーラGLBを読み込めません:", a.model, e);
         }
       }
-      if (!obj) obj = this._makeFallbackAura(a);
+      if (!obj) {
+        obj = createKiAura(this.THREE, {
+          color: a.color,
+          boltColor: a.boltColor,
+          opacity: a.opacity != null ? a.opacity : 0.9,
+        });
+      }
       if (this.disposed) return;
 
-      this._tintAura(obj, a);
       obj.scale.setScalar(a.scale || 1);
       obj.position.y = a.yOffset || 0;
       obj.visible = false;
@@ -213,27 +221,7 @@ export default class CharacterRig {
     this._applyAuraVisibility();
   }
 
-  /** オーラGLBが無いときの簡易オーラ（光る殻） */
-  _makeFallbackAura(a) {
-    const THREE = this.THREE;
-    const g = new THREE.Group();
-    const geo = new THREE.IcosahedronGeometry(0.55, 2);
-    const mat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(a.color || "#ffffff"),
-      transparent: true,
-      opacity: 0.25,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.BackSide,
-    });
-    const shell = new THREE.Mesh(geo, mat);
-    shell.scale.set(1, 1.6, 1);
-    shell.position.y = 0.9;
-    g.add(shell);
-    return g;
-  }
-
-  /** オーラの色・濃さをまとめて設定します */
+  /** オーラの色・濃さをまとめて設定します（GLBオーラを使う場合のみ） */
   _tintAura(obj, a) {
     const THREE = this.THREE;
     const color = new THREE.Color(a.color || "#ffffff");
@@ -296,16 +284,27 @@ export default class CharacterRig {
           this._applyAuraVisibility();
         }
       }
+    } else if (this.transformed && this.auraMode !== "transformed" && this.auraMeshes.transformed) {
+      // 変身モーションを再生していない（既に別のモーションへ移った / 用意が無い）場合は
+      // 変身状態である限りオーラを出し続けます
+      this.auraMode = "transformed";
+      this._applyAuraVisibility();
     }
 
-    // --- オーラを少し揺らす（見た目に生気を出す） ---
+    // --- オーラの更新 ---
     const aura = this.auraMeshes[this.auraMode];
     if (aura) {
-      const time = (this._t = (this._t || 0) + dt);
-      const base = (this.config.aura[this.auraMode].scale) || 1;
-      const pulse = 1 + Math.sin(time * 4.2) * 0.05;
-      aura.scale.set(base * pulse, base * (1 + Math.sin(time * 3.1) * 0.08), base * pulse);
-      aura.rotation.y += dt * 0.6;
+      if (aura.userData.tick) {
+        // 手続き型オーラ。揺らめきはシェーダー側で作るのでここでは時間だけ進めます
+        aura.userData.tick(dt);
+      } else {
+        // GLBオーラ。少し脈動させて生気を出します
+        const time = (this._t = (this._t || 0) + dt);
+        const base = ((this.config.aura[this.auraMode] || {}).scale) || 1;
+        const pulse = 1 + Math.sin(time * 4.2) * 0.05;
+        aura.scale.set(base * pulse, base * (1 + Math.sin(time * 3.1) * 0.08), base * pulse);
+        aura.rotation.y += dt * 0.6;
+      }
     }
 
     // --- 1回再生の終了検知 ---
