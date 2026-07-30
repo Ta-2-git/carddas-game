@@ -88,13 +88,15 @@ export const CHARACTERS = {
     name: "孫悟空",
     model: `${R2}/goku1_idle.glb`,
     fps: 30,
-    // rotationY は「度」で指定します。
-    // 旧コードは 45 をラジアンとして渡していたため、見た目は約58度でした。
-    // 同じ見た目にするため 58 にしてあります（好みで調整してください）。
-    camera: { cameraY: 1.2, cameraZ: 2.7, lookAtY: 0.8, rotationY: 58 },
+    // rotationY は「度」で指定します（カード一覧・VS画面など単体表示用。
+    // 対戦画面は BattleStage3D 側で敵と向き合う向きに固定するので無関係です）。
+    // 待機モーションが goku1_idle.glb だった頃は、そのGLBに約-55度のヨーが
+    // 焼き込まれていたため、それを打ち消す 58 を指定していました。
+    // Goku_Motion.fbx は焼き込みヨーがほぼ0度なので 0 にしています。
+    camera: { cameraY: 1.2, cameraZ: 2.7, lookAtY: 0.8, rotationY: 0 },
 
     motions: {
-      idle:          { file: `${R2}/goku1_idle.glb`,      loop: true }, // Goku_Motion.fbxは要確認のため一旦保留（下記コメント参照）
+      idle:          { file: `${R2}/Goku_Motion.fbx`,     loop: true },
       melee:         { file: `${R2}/Goku_Combo.fbx`,      loop: false, speed: 1.0 },
       kiBlast:       { file: `${R2}/Goku_KiBlast.fbx`,    loop: false },
       ultimate:      { file: `${R2}/Goku_Kamehameha.fbx`, loop: false },

@@ -16,6 +16,26 @@ const PLAYER_X = -1.7;
 const ENEMY_X = 1.7;
 const CHAR_SCALE = 1.6; // 二回り大きく表示する倍率
 
+// ---- カメラの収まり設定 ----------------------------------------
+//  端末ごとに画面比率が違っても「2人とも見切れない」ようにするため、
+//  必要な表示範囲を世界座標で決めて、そこから距離を逆算します。
+const FOV_Y = 38;
+const FIT_HALF_W = 2.65; // 左右に必要な半幅（キャラ位置±1.7 ＋ 体の幅と余白）
+const FIT_HALF_H = 1.15; // 上下に必要な半高
+const FIT_CENTER_Y = 1.05;
+
+/** 画面比率に合わせてカメラを引き、2人とも収まる距離に置きます */
+function frameCamera(camera, aspect) {
+  const tanY = Math.tan((FOV_Y * Math.PI) / 180 / 2);
+  const distV = FIT_HALF_H / tanY;                // 縦に収まる距離
+  const distH = FIT_HALF_W / (tanY * aspect);     // 横に収まる距離
+  const dist = Math.max(distV, distH);            // 厳しい方に合わせる
+  camera.aspect = aspect;
+  camera.position.set(0, FIT_CENTER_Y + 0.3, dist);
+  camera.lookAt(0, FIT_CENTER_Y, 0);
+  camera.updateProjectionMatrix();
+}
+
 export default function BattleStage3D({
   playerCardId,
   enemyCardId,
@@ -27,29 +47,32 @@ export default function BattleStage3D({
   enemyAnimLoop = false,
   shot = null,          // { key, from: "player"|"enemy", kind: "kiBlast"|"ultimate" }
   onShotHit = null,     // 着弾時に呼ばれます
-  width = 360,
-  height = 240,
+  width = null,         // 未指定なら親要素いっぱいに自動フィット（スマホ/PC両対応）
+  height = null,
 }) {
   const mountRef = useRef(null);
   const stateRef = useRef({});
 
-  // ---------- 初期化（1回だけ） ----------
+  // ---------- 初期化（キャラが変わった時だけ） ----------
   useEffect(() => {
     const THREE = window.THREE;
     if (!THREE || !mountRef.current) return;
     const S = stateRef.current;
     let cancelled = false;
 
+    const el = mountRef.current;
+    const w0 = width || el.clientWidth || 360;
+    const h0 = height || el.clientHeight || 240;
+
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(width, height);
+    renderer.setSize(w0, h0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
-    mountRef.current.appendChild(renderer.domElement);
+    el.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-    camera.position.set(0, 1.6, 4.6);
-    camera.lookAt(0, 1.15, 0); // キャラ拡大分、頭が見切れないようやや上を見る
+    const camera = new THREE.PerspectiveCamera(FOV_Y, w0 / h0, 0.1, 100);
+    frameCamera(camera, w0 / h0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     const dir = new THREE.DirectionalLight(0xffffff, 1.15);
@@ -93,7 +116,34 @@ export default function BattleStage3D({
       stateRef.current = {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerCardId, enemyCardId, width, height]);
+  }, [playerCardId, enemyCardId]);
+
+  // ---------- 画面サイズへの追従（スマホ/PC・回転の両方に対応） ----------
+  useEffect(() => {
+    const el = mountRef.current;
+    if (!el) return;
+
+    const apply = () => {
+      const S = stateRef.current;
+      if (!S.renderer || !S.camera) return;
+      const w = Math.round(width || el.clientWidth);
+      const h = Math.round(height || el.clientHeight);
+      if (w < 2 || h < 2) return;
+      S.renderer.setSize(w, h);
+      frameCamera(S.camera, w / h);
+    };
+
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (ro) ro.observe(el);
+    window.addEventListener("resize", apply);
+    window.addEventListener("orientationchange", apply);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", apply);
+      window.removeEventListener("orientationchange", apply);
+    };
+  }, [width, height]);
 
   // ---------- モーション切り替え ----------
   useEffect(() => {
@@ -136,7 +186,17 @@ export default function BattleStage3D({
     spawnShot(S, shot);
   }, [shot && shot.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={mountRef} style={{ width, height }} />;
+  return (
+    <div
+      ref={mountRef}
+      style={{
+        width: width || "100%",
+        height: height || "100%",
+        minHeight: 180,
+        lineHeight: 0, // canvas下の余白を出さない
+      }}
+    />
+  );
 }
 
 // =============================================================

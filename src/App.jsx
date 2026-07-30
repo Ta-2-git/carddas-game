@@ -1476,7 +1476,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         {dragonBurstPhase === "janken" && (<div style={{ position: "absolute", top: 10, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 10 }}><div style={{ background: "rgba(0,0,0,0.75)", border: "2px solid #ef4444", borderRadius: 20, padding: "4px 16px", fontFamily: "monospace", fontWeight: "900", fontSize: 13, color: "#fbbf24", letterSpacing: 2 }}>🔥 ATK × {dragonBurstMultiplier.toFixed(1)}</div></div>)}
         <div style={{ position: "absolute", bottom: 10, left: 10, right: 10, height: 2, background: "linear-gradient(90deg,transparent,rgba(180,120,60,0.5),rgba(180,120,60,0.5),transparent)" }} />
 
-        <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", alignSelf: "stretch", display: "flex", justifyContent: "center" }}>
           <BattleStage3D
             playerCardId={playerCard.id}
             enemyCardId={enemyData.id}
@@ -1487,8 +1487,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}
             onShotHit={() => setShot(null)}
-            width={360}
-            height={240}
           />
 
           {clashSparks && (dragonBurstPhase === "janken" || dragonBurstPhase === "clash") && (

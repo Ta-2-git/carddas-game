@@ -26,17 +26,40 @@ function getFBXLoader() {
   return new THREE.FBXLoader();
 }
 
-// このプロジェクトのFBXモーションはZ-up設定のまま書き出されており、
-// 素体（Y-up）にそのまま適用すると前方向が下方向にズレて再生されます。
-// ルートボーン(Hips)のposition/quaternionだけをX軸-90度分補正することで、
-// 子ボーンはFKで連動して正しい向きになります。
+// -------------------------------------------------------------
+//  FBXモーションを素体（GLB）の骨へ移すときの向き補正
+// -------------------------------------------------------------
+//  BlenderからZ-upのまま書き出したFBXは、キャラを立たせるための回転が
+//  アーマチュア（ボーンの親グループ）側に入っています。
+//  例: Armature001.quaternion = (-0.7071, 0, 0, 0.7071) = X軸 -90度
+//
+//  アニメーションだけを取り出して素体の骨に流し込むと、この親側の回転が
+//  抜け落ちるため、キャラが前のめりに倒れた状態で再生されます
+//  （近接攻撃が地面に向かって出ているように見えるのはこれが原因）。
+//
+//  そこで、親グループの回転をルートボーン(Hips)のトラックへ焼き込みます。
+//  ・position … 回転を掛けて座標系を合わせる
+//  ・quaternion… 回転を「前から」掛ける（合成）。
+//    ここで R*q*R⁻¹ のような共役変換にすると回転角が変わらないため、
+//    倒れたままになるので注意。
+// -------------------------------------------------------------
 const FBX_ROOT_BONE = "Hips";
 
-function fixFbxUpAxis(clip) {
+/** ルートボーンの親（アーマチュア）のワールド回転を取り出します */
+function getArmatureQuaternion(object) {
+  const THREE = window.THREE;
+  const q = new THREE.Quaternion();
+  let rootBone = null;
+  object.traverse((o) => { if (!rootBone && o.isBone && o.name === FBX_ROOT_BONE) rootBone = o; });
+  if (!rootBone || !rootBone.parent) return q;
+  object.updateMatrixWorld(true);
+  rootBone.parent.getWorldQuaternion(q);
+  return q;
+}
+
+function bakeArmatureRotation(clip, R) {
   const THREE = window.THREE;
   if (!THREE) return clip;
-  const R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-  const Rinv = R.clone().invert();
   const v = new THREE.Vector3();
   const q = new THREE.Quaternion();
 
@@ -51,7 +74,7 @@ function fixFbxUpAxis(clip) {
       for (let i = 0; i < track.times.length; i++) {
         const o = i * 4;
         q.set(track.values[o], track.values[o + 1], track.values[o + 2], track.values[o + 3]);
-        const qn = R.clone().multiply(q).multiply(Rinv);
+        const qn = R.clone().multiply(q);
         track.values[o] = qn.x; track.values[o + 1] = qn.y; track.values[o + 2] = qn.z; track.values[o + 3] = qn.w;
       }
     }
@@ -68,7 +91,8 @@ export function loadGLTF(url) {
       const loader = getFBXLoader();
       if (!loader) { reject(new Error("THREE.FBXLoader が読み込まれていません")); return; }
       loader.load(url, (object) => {
-        (object.animations || []).forEach(fixFbxUpAxis);
+        const R = getArmatureQuaternion(object);
+        (object.animations || []).forEach((clip) => bakeArmatureRotation(clip, R));
         resolve({ scene: object, animations: object.animations || [] });
       }, undefined, reject);
       return;
