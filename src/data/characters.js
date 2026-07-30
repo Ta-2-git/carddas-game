@@ -94,7 +94,7 @@ export const CHARACTERS = {
     camera: { cameraY: 1.2, cameraZ: 2.7, lookAtY: 0.8, rotationY: 58 },
 
     motions: {
-      idle:          { file: `${R2}/Goku_Motion.fbx`,     loop: true },
+      idle:          { file: `${R2}/goku1_idle.glb`,      loop: true }, // Goku_Motion.fbxは要確認のため一旦保留（下記コメント参照）
       melee:         { file: `${R2}/Goku_Combo.fbx`,      loop: false, speed: 1.0 },
       kiBlast:       { file: `${R2}/Goku_KiBlast.fbx`,    loop: false },
       ultimate:      { file: `${R2}/Goku_Kamehameha.fbx`, loop: false },

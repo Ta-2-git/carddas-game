@@ -56,8 +56,9 @@ export default function BattleStage3D({
     dir.position.set(2, 4, 3);
     scene.add(dir);
 
-    const playerRig = new CharacterRig({ cardId: playerCardId, isEnemy: false });
-    const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true });
+    // 自キャラは敵(+X側)を、敵キャラは自キャラ(-X側)を向くように固定する
+    const playerRig = new CharacterRig({ cardId: playerCardId, isEnemy: false, facingYDeg: 90 });
+    const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90 });
     playerRig.root.position.x = PLAYER_X;
     enemyRig.root.position.x = ENEMY_X;
     playerRig.root.scale.setScalar(CHAR_SCALE);

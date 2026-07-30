@@ -16,12 +16,15 @@ import { getCharacter, MOTION } from "../data/characters";
 const FADE = 0.18; // モーション切り替えにかける秒数
 
 export default class CharacterRig {
-  constructor({ cardId, isEnemy = false, onReady = null }) {
+  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null }) {
     this.THREE = window.THREE;
     this.cardId = cardId;
     this.config = getCharacter(cardId);
     this.isEnemy = isEnemy;
     this.onReady = onReady;
+    // 指定があれば cfg.camera.rotationY より優先して、この向き（度）で固定する
+    // （BattleStage3Dのように「敵と向き合わせたい」場面で使う）
+    this.facingYDeg = facingYDeg;
 
     this.root = new this.THREE.Group();      // 位置・向きを持つ親
     this.modelGroup = new this.THREE.Group(); // 素体モデル
@@ -67,10 +70,14 @@ export default class CharacterRig {
     // 素体GLBに入っているアニメも待機として使えるようにしておく
     this._builtinClips = gltf.animations || [];
 
-    // 向き（敵は反転）
-    const rotDeg = (cfg.camera && cfg.camera.rotationY) || 0;
-    const rot = (rotDeg * Math.PI) / 180;
-    this.model.rotation.y = this.isEnemy ? Math.PI + rot : rot;
+    // 向き（敵は反転）。facingYDeg指定時はそちらを優先します
+    if (this.facingYDeg != null) {
+      this.model.rotation.y = (this.facingYDeg * Math.PI) / 180;
+    } else {
+      const rotDeg = (cfg.camera && cfg.camera.rotationY) || 0;
+      const rot = (rotDeg * Math.PI) / 180;
+      this.model.rotation.y = this.isEnemy ? Math.PI + rot : rot;
+    }
 
     // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
     // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
