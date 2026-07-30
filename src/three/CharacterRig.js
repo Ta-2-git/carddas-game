@@ -85,6 +85,13 @@ export default class CharacterRig {
     // オーラや他モーションの先読みを並行して進める
     this.play(MOTION.IDLE, { immediate: true });
 
+    // 読み込み前に指定されていたモーションがあれば、ここで再生します
+    if (this._queuedMotion) {
+      const q = this._queuedMotion;
+      this._queuedMotion = null;
+      if (q.name !== MOTION.IDLE) this.play(q.name, q.opts);
+    }
+
     this._loadAuras(); // オーラは待たずに裏で読み込む
 
     // 他のモーションも裏で先読みしておく（技を出す瞬間に読み込み待ちで
@@ -134,7 +141,10 @@ export default class CharacterRig {
    * @param {object} opts  { immediate: フェードなしで即切替 }
    */
   play(name, opts = {}) {
-    if (this.disposed || !this.mixer) return;
+    if (this.disposed) return;
+    // 素体の読み込みが終わる前に指定された場合は覚えておき、
+    // 読み込み完了後に再生します（開始直後の変身モーション等が消えないように）
+    if (!this.mixer) { this._queuedMotion = { name, opts }; return; }
     if (this.current === name && !opts.force) return;
 
     const start = (action) => {
