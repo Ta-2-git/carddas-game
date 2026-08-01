@@ -49,12 +49,14 @@ function trimClip(THREE, clip, start, end) {
 }
 
 export default class CharacterRig {
-  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null }) {
+  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null, onShot = null }) {
     this.THREE = window.THREE;
     this.cardId = cardId;
     this.config = getCharacter(cardId);
     this.isEnemy = isEnemy;
     this.onReady = onReady;
+    // モーションが「腕を伸ばしきった瞬間」に呼ばれます（弾を出すタイミング）
+    this.onShot = onShot;
     // 指定があれば cfg.camera.rotationY より優先して、この向き（度）で固定する
     // （BattleStage3Dのように「敵と向き合わせたい」場面で使う）
     this.facingYDeg = facingYDeg;
@@ -120,6 +122,21 @@ export default class CharacterRig {
     }
     this.model.rotation.y = this._baseYaw;
     this._targetYaw = this._baseYaw;
+
+    // オーラを体に追従させるための骨（倒れたらオーラも一緒に倒れます）
+    this.model.updateMatrixWorld(true);
+    this._hipsBone = null; this._headBone = null;
+    this.model.traverse((o) => {
+      if (!o.isBone) return;
+      if (!this._hipsBone && o.name === "Hips") this._hipsBone = o;
+      if (!this._headBone && o.name === "Head") this._headBone = o;
+    });
+    if (this._hipsBone) {
+      const p = new THREE.Vector3();
+      this._hipsBone.getWorldPosition(p);
+      this.root.worldToLocal(p);
+      this._hipsRestY = p.y; // 立っているときの腰の高さ
+    }
 
     // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
     // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
@@ -203,10 +220,18 @@ export default class CharacterRig {
     }
     this.actions[name] = action;
     this._motionMeta = this._motionMeta || {};
+    // shotAt（素材上で腕を伸ばしきる時刻）を、実際の再生時間に直しておきます。
+    // これを使って「モーションが本当にその瞬間に来たとき」に弾を出します。
+    let shotTime = -1;
+    if (m && m.shotAt != null) {
+      const s = Math.max(0, m.trimStart || 0);
+      shotTime = Math.max(0, (m.shotAt - s) / (Math.abs(action.timeScale) || 1));
+    }
     this._motionMeta[name] = {
       loop,
       hold: Boolean(m && m.hold),
       faceCamera: Boolean(m && m.faceCamera),
+      shotTime,
     };
     return action;
   }
@@ -252,6 +277,10 @@ export default class CharacterRig {
       } else {
         this._oneShotLeft = -1;
       }
+      // 弾を出すモーションなら、その瞬間までのカウントダウンを開始します。
+      // モーションの読み込みが遅れても、実際に再生が始まってから数えるので
+      // 「腕を伸ばす前に弾が出る」ことがありません。
+      this._shotLeft = meta.shotTime != null && meta.shotTime >= 0 ? meta.shotTime : -1;
 
       // 変身モーションならフレーム計測を開始
       this.transformElapsed = name === MOTION.TRANSFORM ? 0 : -1;
@@ -320,6 +349,8 @@ export default class CharacterRig {
           boltColor: a.boltColor,
           opacity: a.opacity != null ? a.opacity : 0.9,
           thunder: Boolean(a.thunder),
+          // オーラは腰の位置を基準に置き、体と一緒に動くようにします
+          anchorY: this._hipsRestY != null ? this._hipsRestY : 0.8,
         });
       }
       if (this.disposed) return;
@@ -416,6 +447,29 @@ export default class CharacterRig {
       this._applyAuraVisibility();
     }
 
+    // --- オーラを体に追従させる ---
+    // 腰の位置に置き、背骨（腰→頭）の向きに合わせて傾けます。
+    // これで倒れたときもオーラが体と一緒に倒れます。
+    if (this._hipsBone && this.auraGroup.children.length) {
+      const THREE = this.THREE;
+      this._v1 = this._v1 || new THREE.Vector3();
+      this._v2 = this._v2 || new THREE.Vector3();
+      this._up = this._up || new THREE.Vector3(0, 1, 0);
+      const hips = this._v1, head = this._v2;
+      this._hipsBone.getWorldPosition(hips);
+      this.root.worldToLocal(hips);
+      this.auraGroup.position.copy(hips);
+      if (this._headBone) {
+        this._headBone.getWorldPosition(head);
+        this.root.worldToLocal(head);
+        head.sub(hips);
+        if (head.lengthSq() > 1e-6) {
+          head.normalize();
+          this.auraGroup.quaternion.setFromUnitVectors(this._up, head);
+        }
+      }
+    }
+
     // --- オーラの更新 ---
     const aura = this.auraMeshes[this.auraMode];
     if (aura) {
@@ -429,6 +483,16 @@ export default class CharacterRig {
         const pulse = 1 + Math.sin(time * 4.2) * 0.05;
         aura.scale.set(base * pulse, base * (1 + Math.sin(time * 3.1) * 0.08), base * pulse);
         aura.rotation.y += dt * 0.6;
+      }
+    }
+
+    // --- 弾を出す瞬間の通知 ---
+    if (this._shotLeft > 0) {
+      this._shotLeft -= dt;
+      if (this._shotLeft <= 0) {
+        const motion = this.current;
+        this._shotLeft = -1;
+        if (this.onShot) this.onShot(motion);
       }
     }
 

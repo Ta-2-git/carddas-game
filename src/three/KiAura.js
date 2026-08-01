@@ -115,6 +115,10 @@ export function createKiAura(THREE, opts = {}) {
   //   見える範囲 … y −0.23 〜 1.83（足元が地面より下から立ち上がる）
   const height = opts.height || 2.5;
   const centerY = opts.centerY != null ? opts.centerY : 0.80;
+  // anchorY: このグループ原点が体のどの高さに置かれるか（腰の高さ）。
+  // 体に追従させるため、板は原点からの相対位置で置きます。
+  const anchorY = opts.anchorY != null ? opts.anchorY : 0;
+  const offsetY = centerY - anchorY;
   const width = height * AURA_SHEET.aspect;
 
   const group = new THREE.Group();
@@ -122,7 +126,7 @@ export function createKiAura(THREE, opts = {}) {
 
   const addLayer = (sheet, w, h, z, mat) => {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    mesh.position.set(0, centerY, z);
+    mesh.position.set(0, offsetY, z);
     group.add(mesh);
     layers.push({ material: mat, sheet, time: Math.random() * 2 });
   };

@@ -997,6 +997,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const kaiokenActiveRef = useRef(startsWithKaioken);
   // プレイヤーの通常攻撃の回数。近接と気弾を交互に出すために使います
   const playerAttackCountRef = useRef(0);
+  // 「腕を伸ばしきったら弾を出す」ための予約
+  const pendingShotRef = useRef(null);
   const [dragonBurstPhase, setDragonBurstPhase] = useState(null);
   const [dragonBurstMultiplier, setDragonBurstMultiplier] = useState(1);
   const dragonBurstMultiplierRef = useRef(1);
@@ -1308,6 +1310,21 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     drainRafRef.current = requestAnimationFrame(tick);
   }, []);
 
+  // 予約しておいた弾を実際に発射し、着弾を予約します
+  const firePendingShot = useCallback(() => {
+    const p = pendingShotRef.current;
+    if (!p) return;
+    pendingShotRef.current = null;
+    setShot({ key: Date.now(), from: "player", kind: p.kind });
+    setTimeout(p.onLand, p.travelMs);
+  }, []);
+
+  // 3D側から「腕を伸ばしきった」合図が来たとき
+  const handlePlayerShot = useCallback((motion) => {
+    const p = pendingShotRef.current;
+    if (p && p.motion === motion) firePendingShot();
+  }, [firePendingShot]);
+
   const doAttack = (attacker, move, dmg, hand, eHand, isKaioken) => {
     // 必殺技以外の攻撃は、近接攻撃と気弾攻撃をだいたい交互に出します
     const isPlayerNormal = attacker === "player" && playerCard.isGoku && move.id !== "rock_kamehameha";
@@ -1367,34 +1384,45 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setTimeout(() => { afterHit("punch", "enemy"); }, 1800);
       return;
     }
-    // 弾を撃つ技は「腕を伸ばしきった瞬間」に出るよう、
-    // モーション設定から発射タイミングを逆算します
     const isUltimate = attacker === "player" && playerCard.isGoku && move.id === "rock_kamehameha";
     const shotMotion = isUltimate ? MOTION.ULTIMATE : (useKiBlast ? MOTION.KI_BLAST : null);
-    const shotMs = shotMotion ? Math.round(getMotionShotDelay(playerCard.id, shotMotion) * 1000) : 0;
     // 撃ってから当たるまで（必殺技はエネルギー波を1秒見せる）
     const travelMs = isUltimate ? 1000 : 500;
 
-    if (attacker === "player") {
-      if (playerCard.isGoku) {
-        if (isUltimate) {
-          setPlayerAnim("beam");
-          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "ultimate" }), shotMs);
-        } else if (useKiBlast) {
-          setPlayerAnim(MOTION.KI_BLAST);
-          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "kiBlast" }), shotMs);
-        } else if (move.id === "scissors_kick") setPlayerAnim("kick");
-        else setPlayerAnim("punch");
-      } else setPlayerAnim("attack");
-      setEnemyAnim("idle");
-    } else { setEnemyAnim("attack"); setPlayerAnim("idle"); }
-    setTimeout(() => {
+    const landHit = () => {
       if (attacker === "player") setEnemyAnim("hit");
       else { setEnemyAnim("idle"); setPlayerAnim("hit"); }
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
-    }, shotMotion ? shotMs + travelMs : 700);
+    };
+
+    if (attacker === "player") {
+      if (playerCard.isGoku) {
+        if (isUltimate) setPlayerAnim("beam");
+        else if (useKiBlast) setPlayerAnim(MOTION.KI_BLAST);
+        else if (move.id === "scissors_kick") setPlayerAnim("kick");
+        else setPlayerAnim("punch");
+      } else setPlayerAnim("attack");
+      setEnemyAnim("idle");
+    } else { setEnemyAnim("attack"); setPlayerAnim("idle"); }
+
+    if (shotMotion) {
+      // 弾は「モーションが実際に腕を伸ばしきった瞬間」に出します。
+      // 固定のタイマーだと、モーションの読み込みが遅れたときに
+      // 腕を伸ばす前に弾が出てしまうため、3D側からの合図を待ちます。
+      pendingShotRef.current = {
+        motion: shotMotion,
+        kind: isUltimate ? "ultimate" : "kiBlast",
+        onLand: landHit,
+        travelMs,
+      };
+      // 念のための保険（合図が来ない場合でも進行が止まらないように）
+      const fallbackMs = Math.round(getMotionShotDelay(playerCard.id, shotMotion) * 1000) + 2500;
+      setTimeout(() => { if (pendingShotRef.current) firePendingShot(); }, fallbackMs);
+    } else {
+      setTimeout(landHit, 700);
+    }
   };
 
   const showRoundAnnounce = useCallback((roundNum, onDone) => {
@@ -1530,6 +1558,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}
             onShotHit={() => setShot(null)}
+            onPlayerShot={handlePlayerShot}
           />
 
           {clashSparks && (dragonBurstPhase === "janken" || dragonBurstPhase === "clash") && (
