@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
-import { has3DModel, MOTION } from "./data/characters";
+import { has3DModel, MOTION, getUltimateShotDelay } from "./data/characters";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -1314,7 +1314,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         }
         drainHp(hitTarget, fromHp, newHp, () => {
           if (newHp <= 0) {
-            if (hitTarget === "enemy") { setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "win"); setEnemyAnim("lose"); setTimeout(() => onEnd(true), 1500); setPhase("result"); }
+            if (hitTarget === "enemy") { setPlayerAnim("win"); setEnemyAnim("lose"); setTimeout(() => onEnd(true), 1500); setPhase("result"); }
             else {
               const canRevive = eventCard?.effect === "revive_half" && !eventCardUsedRef.current && turn <= 5;
               if (canRevive) {
@@ -1323,7 +1323,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
                   const reviveHp = Math.floor(playerCard.hp / 2);
                   setPlayerHp(reviveHp); playerHpRef.current = reviveHp; setPlayerDisplayHp(reviveHp);
                   setBattleLog(l => [...l, `ナメック星人の力発動！ HP ${reviveHp} 回復！`]);
-                  setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "idle"); setEnemyAnim("idle");
+                  setPlayerAnim("idle"); setEnemyAnim("idle");
                   setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1);
                 });
               } else { setEnemyAnim("win"); setPlayerAnim("lose"); setTimeout(() => onEnd(false), 1500); setPhase("result"); }
@@ -1337,7 +1337,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
               setPlayerHp(newHpG); playerHpRef.current = newHpG; setPlayerMaxHp(newMax); setPlayerDisplayHp(newHpG);
               setPlayerCurrentAtk(getGotenksAtk(newLv)); gotenksLevelRef.current = newLv; setGotenksLevel(newLv);
             }
-            if (needsDash) { setPlayerAnim(isKaioken ? "kaioken_idle" : "idle"); setEnemyAnim("idle"); setPlayerOffset(0); }
+            if (needsDash) { setPlayerAnim("idle"); setEnemyAnim("idle"); setPlayerOffset(0); }
             setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1);
           }
         });
@@ -1345,22 +1345,33 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     };
     if (needsDash) {
       setPlayerAnim("dash"); setEnemyAnim("idle"); setPlayerOffset(160);
-      setTimeout(() => { setPlayerAnim(isKaioken ? "kaioken_idle" : "idle"); }, 600);
+      setTimeout(() => { setPlayerAnim("idle"); }, 600);
       setTimeout(() => { if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); setEnemyAnim("hit"); setDamageNum(dmg); setDamagePos("enemy"); setBattleLog(l => [...l, `T${turn}: ${playerCard.name}の${move.name}！ ${dmg}ダメージ！`]); }, 1100);
       setTimeout(() => { afterHit("punch", "enemy"); }, 1800);
       return;
     }
+    // 必殺技は「腕を伸ばしきった瞬間」にエネルギー波が出るよう、
+    // モーション設定から発射タイミングを逆算します
+    const isUltimate = attacker === "player" && playerCard.isGoku && move.id === "rock_kamehameha";
+    const ultimateShotMs = isUltimate ? Math.round(getUltimateShotDelay(playerCard.id) * 1000) : 0;
+
     if (attacker === "player") {
-      if (playerCard.isGoku) { if (move.id === "rock_kamehameha") { setPlayerAnim("beam"); setShot({ key: Date.now(), from: "player", kind: "ultimate" }); } else if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); } else setPlayerAnim("attack");
+      if (playerCard.isGoku) {
+        if (move.id === "rock_kamehameha") {
+          setPlayerAnim("beam");
+          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "ultimate" }), ultimateShotMs);
+        } else if (move.id === "scissors_kick") setPlayerAnim("kick");
+        else setPlayerAnim("punch");
+      } else setPlayerAnim("attack");
       setEnemyAnim("idle");
-    } else { setEnemyAnim("attack"); setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "idle"); }
+    } else { setEnemyAnim("attack"); setPlayerAnim("idle"); }
     setTimeout(() => {
       if (attacker === "player") setEnemyAnim("hit");
-      else { setEnemyAnim("idle"); setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "hit"); }
+      else { setEnemyAnim("idle"); setPlayerAnim("hit"); }
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
-    }, 700);
+    }, isUltimate ? ultimateShotMs + 400 : 700);
   };
 
   const showRoundAnnounce = useCallback((roundNum, onDone) => {
@@ -1371,17 +1382,26 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   }, []);
 
   const nextTurn = useCallback((isKaioken, nextTurnNum) => {
-    setPlayerAnim(isKaioken && playerCard.isGoku ? "kaioken_idle" : "idle"); setEnemyAnim("idle");
+    setPlayerAnim("idle"); setEnemyAnim("idle");
     setPlayerHand(null); setEnemyHand(null); setJankenResult(null); setTurn(nextTurnNum);
-    if (playerCard.isGoku && !kaiokenUnlockedRef.current && playerHpRef.current <= boostedHp / 2) {
+
+    // HPが半分以下になったら、次のじゃんけんが始まる前に界王拳を発動します
+    // （攻撃を受けて起き上がったこのタイミングで変身モーションを再生）
+    let kaiokenDelay = 0;
+    if (playerCard.isGoku && !kaiokenActiveRef.current && playerHpRef.current <= boostedHp / 2) {
       kaiokenUnlockedRef.current = true; setKaiokenUnlocked(true);
-      setBattleLog(l => [...l, `HP半分以下！界王拳が使えるようになった！`]);
+      kaiokenActiveRef.current = true; setKaiokenActive(true);
+      setPlayerAnim(MOTION.TRANSFORM);
+      setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
+      kaiokenDelay = 1900; // 変身モーション(1.5秒)＋余韻
     }
+
     const startRound = () => {
       if (nextTurnNum === 4 && !kiryokuUsedRef.current) { kiryokuUsedRef.current = true; startKiryoku(bonus => { setAtkBonus(bonus); setPhase("choose"); setTimer(15); setTimerActive(true); }); }
       else { setPhase("choose"); setTimer(15); setTimerActive(true); }
     };
-    showRoundAnnounce(nextTurnNum, startRound);
+    if (kaiokenDelay > 0) setTimeout(() => showRoundAnnounce(nextTurnNum, startRound), kaiokenDelay);
+    else showRoundAnnounce(nextTurnNum, startRound);
   }, [playerCard, startKiryoku, showRoundAnnounce]);
 
   return (
@@ -1480,7 +1500,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           <BattleStage3D
             playerCardId={playerCard.id}
             enemyCardId={enemyData.id}
-            playerAnim={dragonBurstPhase === "janken" ? "dash" : playerAnim}
+            playerAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : playerAnim}
             enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
             playerTransformed={kaiokenActive}
             enemyTransformed={false}
@@ -1557,7 +1577,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
       <DragonBurstDecideScreen data={dragonBurstDecide} />
 
-      {rouletteState && (
+      {rouletteState && (() => { const rouletteWheelSize = Math.round(Math.max(190, Math.min(window.innerWidth * 0.47, window.innerHeight * 0.72))); return (
         <div style={{ position: "fixed", inset: 0, zIndex: 55, display: "flex", flexDirection: "row", fontFamily: "monospace", overflow: "hidden" }}
           onClick={() => { if (rouletteState.attacker === "player") { if (!rouletteState.atkStopped) stopAtkRoulette(); } else { if (!rouletteState.defStopped) stopDefRoulette(); } }}
           onTouchEnd={(e) => { e.preventDefault(); if (rouletteState.attacker === "player") { if (!rouletteState.atkStopped) stopAtkRoulette(); } else { if (!rouletteState.defStopped) stopDefRoulette(); } }}>
@@ -1576,10 +1596,10 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             const onTap = isPlayerSide ? (showPlayerAtk ? stopAtkRoulette : stopDefRoulette) : () => {};
             const accentColor = isAttack ? "#ef4444" : "#3b82f6";
             return (
-              <div key={String(isPlayerSide)} style={{ width: "50%", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, background: isAttack ? "linear-gradient(160deg,#1a0000,#2a0800)" : "linear-gradient(160deg,#00001a,#000a20)", borderRight: isPlayerSide ? `2px solid ${accentColor}44` : "none", padding: "6px 2px", position: "relative", overflow: "hidden" }}>
+              <div key={String(isPlayerSide)} style={{ width: "50%", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: isAttack ? "linear-gradient(160deg,#1a0000,#2a0800)" : "linear-gradient(160deg,#00001a,#000a20)", borderRight: isPlayerSide ? `2px solid ${accentColor}44` : "none", padding: "2px 1px", position: "relative", overflow: "hidden" }}>
                 <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", letterSpacing: 2, zIndex: 1 }}>{isPlayerSide ? "あなた" : "てき"} の {isAttack ? "攻撃" : "ガード"}</div>
                 <div style={{ zIndex: 1, width: "100%", display: "flex", justifyContent: "center" }}>
-                  <RouletteWheel slots={slots} currentIdx={idx} isAttack={isAttack} lv={lv} stopped={stopped} result={result} onTap={canTap ? onTap : () => {}} size={172} />
+                  <RouletteWheel slots={slots} currentIdx={idx} isAttack={isAttack} lv={lv} stopped={stopped} result={result} onTap={canTap ? onTap : () => {}} size={rouletteWheelSize} />
                 </div>
                 {canTap && <div style={{ fontSize: 9, fontWeight: "900", color: accentColor, letterSpacing: 2, animation: "pulse 0.5s infinite", zIndex: 1 }}>▼ タップして止める！</div>}
                 {stopped && result && <div style={{ fontSize: 11, fontWeight: "900", color: isAttack ? (result === "special" ? "#ef4444" : "#9ca3af") : (GUARD_COLOR[result] || "#9ca3af"), animation: "scaleIn 0.3s ease", letterSpacing: 1, zIndex: 1 }}>{isAttack ? (result === "special" ? "💥 必殺技！" : "ノーマル") : `🛡️ ${GUARD_LABEL[result]}`}</div>}
@@ -1592,7 +1612,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             </div>
           )}
         </div>
-      )}
+      ); })()}
 
       {(phase === "choose" || phase === "waiting_enemy") && (
         <div style={{ padding: "10px 12px 14px", background: "rgba(0,0,0,0.68)", borderTop: "1px solid #1f2937", position: "relative", zIndex: 2 }}>

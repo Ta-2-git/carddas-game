@@ -42,11 +42,18 @@ export const AURA_PRESETS = {
 //  fps        … Blenderで作った時のフレームレート。変身オーラの開始フレーム計算に使います
 //  camera     … 表示時のカメラ（cameraY:高さ / cameraZ:距離 / lookAtY:注視点 / rotationY:向き(度)）
 //
-//  motions    … モーション。file にモーション入りGLBのURLを指定します
-//               clip  : GLB内のアニメーション名（省略時は最初のもの）
-//               loop  : true=ループ / false=1回だけ再生して待機に戻る
-//               speed : 再生速度（1.0=等速、2.0=倍速）
-//               hold  : true にすると再生後、最後のポーズで止まったままになります
+//  motions    … モーション。file にモーション入りGLB/FBXのURLを指定します
+//               clip       : ファイル内のアニメーション名（省略時は最初のもの）
+//               loop       : true=ループ / false=1回だけ再生して待機に戻る
+//               speed      : 再生速度（1.0=等速、2.0=倍速）
+//               duration   : 「何秒で再生し終えるか」。速度を自動計算します
+//                            （speed より優先。素材が長すぎる時に便利）
+//               trimStart  : 素材の先頭を何秒スキップするか
+//               trimEnd    : 素材の何秒目で打ち切るか
+//                            （不要な助走や、最後の静止部分を落とす用）
+//               hold       : true にすると再生後、最後のポーズで止まったままになります
+//               faceCamera : true にすると相手ではなく画面の正面を向いて再生します
+//                            （変身・必殺技など、見せ場のモーション向け）
 //
 //  kiBlast    … 気弾（model 省略時は color の光る球を自動生成）
 //               effect: "sphere"=球 / "beam"=ビーム / "disc"=円盤 / "none"=見た目なし
@@ -103,14 +110,26 @@ export const CHARACTERS = {
     camera: { cameraY: 1.2, cameraZ: 2.7, lookAtY: 0.8, rotationY: 0 },
 
     motions: {
-      idle:          { file: `${R2}/Goku_Motion.fbx`,     loop: true },
-      melee:         { file: `${R2}/Goku_Combo.fbx`,      loop: false, speed: 1.0 },
-      kiBlast:       { file: `${R2}/Goku_KiBlast.fbx`,    loop: false },
-      ultimate:      { file: `${R2}/Goku_Kamehameha.fbx`, loop: false },
-      transform:     { file: `${R2}/Goku_変身.fbx`,        loop: false, hold: true },
-      hitByMelee:    { file: `${R2}/Goku_Receive.fbx`,    loop: false },
-      hitByKiBlast:  { file: "",                          loop: false },
-      hitByUltimate: { file: "",                          loop: false },
+      idle: { file: `${R2}/Goku_Motion.fbx`, loop: true },
+
+      // 素材は「パンチ2回→膝蹴り→キック」のコンボ1セット。
+      // 以前パンチが4回に見えていたのは、接近(dash)と攻撃(punch)の両方が
+      // このモーションに割り当てられ2回再生されていたためで、素材側は正常です。
+      melee: { file: `${R2}/Goku_Combo.fbx`, loop: false },
+
+      kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false },
+
+      // 素材は8.3秒だが、2.5秒以降は向きが変わって静止するだけなので切り捨て。
+      // 腕を伸ばしきる（＝かめはめ波が出る）のは素材の1.75秒あたり。
+      // ULTIMATE_SHOT_RATIO（characters.js下部）と対応しています。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.5, duration: 2.8, faceCamera: true, shotAt: 1.75 },
+
+      // 素材は8.3秒だが、5.2秒以降は静止。溜め〜気を爆発させる所だけを1.5秒に凝縮。
+      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, hold: true, trimStart: 1.8, trimEnd: 5.2, duration: 1.5, faceCamera: true },
+
+      hitByMelee:    { file: `${R2}/Goku_Receive.fbx`, loop: false },
+      hitByKiBlast:  { file: "", loop: false },
+      hitByUltimate: { file: "", loop: false },
     },
 
     kiBlast:  { model: "", color: "#ffd21a", effect: "sphere", scale: 0.30, speed: 6 },
@@ -118,9 +137,11 @@ export const CHARACTERS = {
 
     // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
     // 界王拳が続くあいだはずっと出したままにします。
+    // startFrame は「変身モーション開始から何フレーム目で出すか」。
+    // 気が爆発するのは1.5秒モーションの約0.5秒＝15フレーム目あたりです。
     aura: {
       normal:      { enabled: false },
-      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.05, opacity: 0.95, yOffset: 0, startFrame: 18 },
+      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 15, thunder: true },
       reverted:    { enabled: false },
     },
   },
@@ -197,6 +218,21 @@ export function has3DModel(cardId) {
   return Boolean(getCharacter(cardId).model);
 }
 
+/**
+ * 必殺技モーションを再生してから、実際にエネルギー波を撃つまでの秒数。
+ * モーション設定の shotAt（素材のうち腕を伸ばしきる時刻）から、
+ * trim と再生速度を考慮して逆算します。
+ */
+export function getUltimateShotDelay(cardId) {
+  const m = (getCharacter(cardId).motions || {}).ultimate || {};
+  if (!m.file || m.shotAt == null) return 0;
+  const start = m.trimStart || 0;
+  const trimmed = m.trimEnd != null ? m.trimEnd - start : null;
+  let scale = m.speed || 1;
+  if (m.duration && trimmed) scale = trimmed / m.duration;
+  return Math.max(0, (m.shotAt - start) / scale);
+}
+
 // =============================================================
 //  モーションの種類（App 側はこの名前で指定します）
 // =============================================================
@@ -220,8 +256,11 @@ export function normalizeMotion(name) {
     case "punch":
     case "kick":
     case "attack":
-    case "dash":
       return MOTION.MELEE;
+    // dash は「相手に近づく移動」なので攻撃モーションにはしません。
+    // （近接モーションに割り当てると、接近時と攻撃時の2回再生されてしまいます）
+    case "dash":
+      return MOTION.IDLE;
     case "beam":
       return MOTION.ULTIMATE;
     case "hit":

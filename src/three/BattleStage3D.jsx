@@ -12,7 +12,9 @@ import { useEffect, useRef } from "react";
 import CharacterRig from "./CharacterRig";
 import { getCharacter, normalizeMotion, MOTION } from "../data/characters";
 
-const CHAR_SCALE = 1.6; // 二回り大きく表示する倍率
+// キャラの表示倍率。素体は身長 約0.97（足0.16〜頭1.13）なので、
+// 1.3倍だと画面に映る高さが「画面幅のおよそ1/4」になります。
+const CHAR_SCALE = 1.3;
 
 // ---- 画面比率への最適化 ----------------------------------------
 //  スマホ（縦長）とPC（横長）で使える形が大きく違うため、

@@ -16,6 +16,38 @@ import { getCharacter, MOTION } from "../data/characters";
 
 const FADE = 0.18; // モーション切り替えにかける秒数
 
+/** クリップの [start, end] 秒だけを取り出した新しいクリップを作ります */
+function trimClip(THREE, clip, start, end) {
+  const out = clip.clone();
+  out.tracks = [];
+  for (const track of clip.tracks) {
+    const stride = track.getValueSize();
+    const times = [];
+    const values = [];
+    const push = (t, srcIdx) => {
+      times.push(t - start);
+      for (let k = 0; k < stride; k++) values.push(track.values[srcIdx * stride + k]);
+    };
+    // 範囲内のキーを集める（範囲外の直前・直後のキーは端に丸めて必ず含める）
+    let firstIdx = 0;
+    for (let i = 0; i < track.times.length; i++) if (track.times[i] <= start) firstIdx = i;
+    push(start, firstIdx);
+    for (let i = 0; i < track.times.length; i++) {
+      const t = track.times[i];
+      if (t > start && t < end) push(t, i);
+    }
+    let lastIdx = track.times.length - 1;
+    for (let i = track.times.length - 1; i >= 0; i--) if (track.times[i] >= end) lastIdx = i;
+    push(end, lastIdx);
+
+    const T = track.constructor;
+    out.tracks.push(new T(track.name, times, values));
+  }
+  out.duration = end - start;
+  out.resetDuration();
+  return out;
+}
+
 export default class CharacterRig {
   constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null }) {
     this.THREE = window.THREE;
@@ -73,12 +105,13 @@ export default class CharacterRig {
 
     // 向き（敵は反転）。facingYDeg指定時はそちらを優先します
     if (this.facingYDeg != null) {
-      this.model.rotation.y = (this.facingYDeg * Math.PI) / 180;
+      this._baseYaw = (this.facingYDeg * Math.PI) / 180;
     } else {
       const rotDeg = (cfg.camera && cfg.camera.rotationY) || 0;
       const rot = (rotDeg * Math.PI) / 180;
-      this.model.rotation.y = this.isEnemy ? Math.PI + rot : rot;
+      this._baseYaw = this.isEnemy ? Math.PI + rot : rot;
     }
+    this.model.rotation.y = this._baseYaw;
 
     // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
     // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
@@ -122,14 +155,32 @@ export default class CharacterRig {
     if (this.disposed || !clip || !this.mixer) return null;
 
     const THREE = this.THREE;
+
+    // trimStart / trimEnd（秒）で使う範囲を切り出します。
+    // 素材の前後にある不要な部分（助走のパンチ、最後の静止など）を落とす用です。
+    if (m && (m.trimStart != null || m.trimEnd != null)) {
+      const s = Math.max(0, m.trimStart || 0);
+      const e = Math.min(clip.duration, m.trimEnd != null ? m.trimEnd : clip.duration);
+      if (e > s) clip = trimClip(THREE, clip, s, e);
+    }
+
     const action = this.mixer.clipAction(clip);
     const loop = m ? m.loop !== false : true;
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = !loop;
-    action.timeScale = (m && m.speed) || 1;
+    // duration（秒）を指定すると、その長さで再生し終わるよう速度を自動調整します
+    if (m && m.duration && clip.duration > 0) {
+      action.timeScale = clip.duration / m.duration;
+    } else {
+      action.timeScale = (m && m.speed) || 1;
+    }
     this.actions[name] = action;
     this._motionMeta = this._motionMeta || {};
-    this._motionMeta[name] = { loop, hold: Boolean(m && m.hold) };
+    this._motionMeta[name] = {
+      loop,
+      hold: Boolean(m && m.hold),
+      faceCamera: Boolean(m && m.faceCamera),
+    };
     return action;
   }
 
@@ -161,6 +212,7 @@ export default class CharacterRig {
       }
       this.currentAction = action;
       this.current = name;
+      this._applyFacing(name);
 
       // 変身モーションならフレーム計測を開始
       this.transformElapsed = name === MOTION.TRANSFORM ? 0 : -1;
@@ -192,6 +244,17 @@ export default class CharacterRig {
     this._loopOverride = Boolean(active);
   }
 
+  /**
+   * モーションごとの向きを反映します。
+   * faceCamera: true のモーション（変身・必殺技など）は、相手ではなく
+   * 画面の正面を向いて再生します。
+   */
+  _applyFacing(name) {
+    if (!this.model) return;
+    const meta = (this._motionMeta || {})[name] || {};
+    this.model.rotation.y = meta.faceCamera ? 0 : (this._baseYaw || 0);
+  }
+
   // ---------------------------------------------------------
   //  オーラ
   // ---------------------------------------------------------
@@ -217,6 +280,7 @@ export default class CharacterRig {
           color: a.color,
           boltColor: a.boltColor,
           opacity: a.opacity != null ? a.opacity : 0.9,
+          thunder: Boolean(a.thunder),
         });
       }
       if (this.disposed) return;
