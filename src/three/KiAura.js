@@ -4,7 +4,8 @@
 //  素材: sozai_0146_dragonball_aura
 //    public/aura_sheet.png    … オーラ 39コマ（8列×5行）
 //    public/thunder_sheet.png … 稲妻 55コマ（8列×7行）
-//  ※ 連番PNGをタイル状に1枚へまとめたものです（scratchpadのbuild_sheet.pyで生成）
+//  ※ 連番PNGをタイル状に1枚へまとめたものです。
+//     作り直すときは tools/build_aura_sheet.py を実行してください。
 //
 //  素材の色は黄色ですが、明るさと「白っぽさ」を取り出して
 //  キャラごとの色に塗り替えています。
