@@ -119,13 +119,16 @@ export const CHARACTERS = {
 
       kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false },
 
-      // 素材は8.3秒だが、2.5秒以降は向きが変わって静止するだけなので切り捨て。
-      // 腕を伸ばしきる（＝かめはめ波が出る）のは素材の1.75秒あたり。
-      // ULTIMATE_SHOT_RATIO（characters.js下部）と対応しています。
-      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.5, duration: 2.8, faceCamera: true, shotAt: 1.75 },
+      // 素材8.3秒のうち、2.05秒以降は向きが変わって静止するだけなので切り捨て。
+      // 溜め〜腕を伸ばしきるまでの全フレームを、2秒で再生し終えます。
+      // 腕が伸びきる（＝かめはめ波が出る）のはその終わり際。
+      // 発射後さらに1秒エネルギー波を出し、全体で約3秒になります。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.05, duration: 2.0, faceCamera: true, shotAt: 2.0 },
 
-      // 素材は8.3秒だが、5.2秒以降は静止。溜め〜気を爆発させる所だけを1.5秒に凝縮。
-      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, hold: true, trimStart: 1.8, trimEnd: 5.2, duration: 1.5, faceCamera: true },
+      // 素材8.3秒のうち、6.0秒以降は静止するだけなので切り捨て。
+      // 溜め〜気の爆発〜構え直しまでの全フレームを、2秒で再生し終えます。
+      // hold は付けません（再生後は待機モーションに戻す。オーラは別管理なので消えません）
+      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 6.0, duration: 2.0, faceCamera: true },
 
       hitByMelee:    { file: `${R2}/Goku_Receive.fbx`, loop: false },
       hitByKiBlast:  { file: "", loop: false },
@@ -138,10 +141,10 @@ export const CHARACTERS = {
     // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
     // 界王拳が続くあいだはずっと出したままにします。
     // startFrame は「変身モーション開始から何フレーム目で出すか」。
-    // 気が爆発するのは1.5秒モーションの約0.5秒＝15フレーム目あたりです。
+    // 気が爆発するのは素材の3.0秒＝2秒に詰めた再生だと約1.0秒＝30フレーム目です。
     aura: {
       normal:      { enabled: false },
-      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 15, thunder: true },
+      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 30, thunder: true },
       reverted:    { enabled: false },
     },
   },

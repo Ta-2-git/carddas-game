@@ -965,7 +965,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [timer, setTimer] = useState(15);
   const [timerActive, setTimerActive] = useState(false);
   const [battleLog, setBattleLog] = useState([]);
-  const [playerAnim, setPlayerAnim] = useState(startsWithKaioken ? MOTION.TRANSFORM : "idle");
+  // 「怒り」で界王拳スタートの場合も、変身モーションはカード説明の表示後に再生します
+  const [playerAnim, setPlayerAnim] = useState("idle");
+  // アップ表示（スカウター演出）中のプレイヤーのモーション
+  const [zoomPlayerAnim, setZoomPlayerAnim] = useState("idle");
+  // 変身モーションを再生したか（＝オーラを出してよいか）
+  const [transformShown, setTransformShown] = useState(false);
   const [enemyAnim, setEnemyAnim] = useState("idle");
   const [shot, setShot] = useState(null);
   const [damageNum, setDamageNum] = useState(null);
@@ -1043,7 +1048,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       T(() => { setShowSupportBanner(false); setShowSupportInfo(true); }, 4400);
       T(() => { setShowSupportInfo(false); }, 6500);
       T(() => {
-        if (startsWithKaioken) { const kaiokenAtk = Math.floor(playerCard.atk * 1.5); setZoomPlayerAtk(kaiokenAtk); setPlayerCurrentAtk(kaiokenAtk); setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300); }
+        if (startsWithKaioken) {
+          const kaiokenAtk = Math.floor(playerCard.atk * 1.5); setZoomPlayerAtk(kaiokenAtk); setPlayerCurrentAtk(kaiokenAtk);
+          // カード説明を見せ終えたこのタイミングで変身モーションを再生します
+          setZoomPlayerAnim(MOTION.TRANSFORM); setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
+          setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300);
+        }
         else if (startsWithSSJ) { const ssjAtk = Math.floor(playerCard.atk * 1.5); const ssjHp = Math.floor(playerCard.hp * 1.5); setPlayerHp(ssjHp); playerHpRef.current = ssjHp; setPlayerMaxHp(ssjHp); setPlayerDisplayHp(ssjHp); setPlayerCurrentAtk(ssjAtk); setZoomPlayerAtk(ssjAtk); setZoomPlayerHp(ssjHp); gotenksLevelRef.current = 1; setGotenksLevel(1); setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300); }
         else if (startsWithBoost) { setPlayerHp(boostedHp); playerHpRef.current = boostedHp; setPlayerMaxHp(boostedHp); setPlayerCurrentAtk(boostedAtk); setZoomPlayerHp(boostedHp); setZoomPlayerAtk(boostedAtk); setTimeout(() => setZoomPlayerStatus(`HP+${supportCard.hpBoost} / ATK+${supportCard.atkBoost}`), 300); }
       }, 6800);
@@ -1371,7 +1381,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
-    }, isUltimate ? ultimateShotMs + 400 : 700);
+      // 必殺技は、腕を伸ばしきってから1秒エネルギー波を出したあとに着弾
+    }, isUltimate ? ultimateShotMs + 1000 : 700);
   };
 
   const showRoundAnnounce = useCallback((roundNum, onDone) => {
@@ -1391,9 +1402,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (playerCard.isGoku && !kaiokenActiveRef.current && playerHpRef.current <= boostedHp / 2) {
       kaiokenUnlockedRef.current = true; setKaiokenUnlocked(true);
       kaiokenActiveRef.current = true; setKaiokenActive(true);
-      setPlayerAnim(MOTION.TRANSFORM);
+      setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
       setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
-      kaiokenDelay = 1900; // 変身モーション(1.5秒)＋余韻
+      kaiokenDelay = 2400; // 変身モーション(2秒)＋余韻
     }
 
     const startRound = () => {
@@ -1439,7 +1450,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         <div style={{ position: "fixed", inset: 0, zIndex: 78, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: "rgba(0,0,0,0.45)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
             <div style={{ transform: "scale(2.2)", transformOrigin: "center bottom", animation: "scouterZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-              {zoomTarget === "player" ? <CharacterFighter card={playerCard} animState={startsWithKaioken ? "kaioken_idle" : "idle"} size={110} scale={0.85} /> : <CharacterFighter card={enemyData} animState="idle" isEnemy size={110} />}
+              {zoomTarget === "player" ? <CharacterFighter card={playerCard} animState={zoomPlayerAnim} transformed={transformShown} size={110} scale={0.85} /> : <CharacterFighter card={enemyData} animState="idle" isEnemy size={110} />}
             </div>
             {showZoomStats && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "scouterStatIn 0.4s ease both", marginLeft: 16 }}>
@@ -1502,7 +1513,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             enemyCardId={enemyData.id}
             playerAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : playerAnim}
             enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
-            playerTransformed={kaiokenActive}
+            playerTransformed={transformShown}
             enemyTransformed={false}
             playerAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}

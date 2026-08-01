@@ -12,16 +12,20 @@ import { useEffect, useRef } from "react";
 import CharacterRig from "./CharacterRig";
 import { getCharacter, normalizeMotion, MOTION } from "../data/characters";
 
-// キャラの表示倍率。素体は身長 約0.97（足0.16〜頭1.13）なので、
-// 1.3倍だと画面に映る高さが「画面幅のおよそ1/4」になります。
-const CHAR_SCALE = 1.3;
+const CHAR_HEIGHT = 0.97; // 素体の身長（足0.16〜頭1.13）
+
+// 画面に映るキャラの高さを「canvas幅の何分の1にするか」。
+// PC（横長）は小さめ、スマホ（縦長）は大きめにします。
+const SIZE_FRAC_WIDE = 1 / 8;
+const SIZE_FRAC_NARROW = 1 / 4;
 
 // ---- 画面比率への最適化 ----------------------------------------
 //  スマホ（縦長）とPC（横長）で使える形が大きく違うため、
 //   1) canvasが縦長になりすぎないように高さを制限する
 //   2) 横幅が足りない時は2人の間隔を詰める
 //   3) 必要な表示範囲からカメラ距離を逆算する
-//  の3段構えで、どちらでも見切れず・小さくなりすぎないようにします。
+//   4) キャラの大きさも画面比率に合わせる
+//  の4段構えで、どちらでも見切れず・大きさが不自然にならないようにします。
 const FOV_Y = 38;
 const MIN_ASPECT = 1.1;    // これより縦長のcanvasにはしない
 const SPREAD_WIDE = 1.7;   // 横に余裕がある時の立ち位置（±）
@@ -30,10 +34,25 @@ const HALF_W_MARGIN = 0.8;  // 立ち位置に足す体の幅＋余白
 const FIT_HALF_H = 1.15;    // 上下に必要な半高
 const FIT_CENTER_Y = 1.05;
 
+/** 画面比率のどのあたりか（0=縦長スマホ / 1=横長PC） */
+function wideness(aspect) {
+  return Math.min(1, Math.max(0, (aspect - 0.9) / (1.8 - 0.9)));
+}
+
 /** 画面比率から2人の立ち位置（中心からの距離）を決めます */
 function spreadFor(aspect) {
-  const t = Math.min(1, Math.max(0, (aspect - 0.9) / (1.8 - 0.9)));
-  return SPREAD_NARROW + (SPREAD_WIDE - SPREAD_NARROW) * t;
+  return SPREAD_NARROW + (SPREAD_WIDE - SPREAD_NARROW) * wideness(aspect);
+}
+
+/**
+ * キャラの表示倍率を決めます。
+ * 「画面に映る高さ ÷ canvas幅」が目標の割合になるよう逆算します。
+ * 横方向に見えている範囲は 2*halfW なので、
+ *   割合 = (身長 × 倍率) / (2 × halfW)
+ */
+function charScaleFor(aspect, halfW) {
+  const frac = SIZE_FRAC_NARROW + (SIZE_FRAC_WIDE - SIZE_FRAC_NARROW) * wideness(aspect);
+  return (frac * 2 * halfW) / CHAR_HEIGHT;
 }
 
 /** 画面比率に合わせてカメラを引き、2人とも収まる距離に置きます */
@@ -53,11 +72,13 @@ function applyLayout(S, w, h) {
   if (!S.renderer || !S.camera) return;
   const aspect = w / h;
   const spread = spreadFor(aspect);
+  const halfW = spread + HALF_W_MARGIN;
+  const scale = charScaleFor(aspect, halfW);
   S.spread = spread;
-  if (S.playerRig) S.playerRig.root.position.x = -spread;
-  if (S.enemyRig) S.enemyRig.root.position.x = spread;
+  if (S.playerRig) { S.playerRig.root.position.x = -spread; S.playerRig.root.scale.setScalar(scale); }
+  if (S.enemyRig) { S.enemyRig.root.position.x = spread; S.enemyRig.root.scale.setScalar(scale); }
   S.renderer.setSize(w, h);
-  frameCamera(S.camera, aspect, spread + HALF_W_MARGIN);
+  frameCamera(S.camera, aspect, halfW);
 }
 
 export default function BattleStage3D({
@@ -105,8 +126,7 @@ export default function BattleStage3D({
     // 自キャラは敵(+X側)を、敵キャラは自キャラ(-X側)を向くように固定する
     const playerRig = new CharacterRig({ cardId: playerCardId, isEnemy: false, facingYDeg: 90 });
     const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90 });
-    playerRig.root.scale.setScalar(CHAR_SCALE);
-    enemyRig.root.scale.setScalar(CHAR_SCALE);
+    // 立ち位置と大きさは applyLayout で画面比率に合わせて設定します
     scene.add(playerRig.root, enemyRig.root);
     playerRig.load();
     enemyRig.load();
@@ -256,7 +276,9 @@ function spawnShot(S, shot) {
   const spread = S.spread || SPREAD_WIDE;
   const startX = fromPlayer ? -spread + 0.35 : spread - 0.35;
   const endX = fromPlayer ? spread - 0.3 : -spread + 0.3;
-  const y = 1.05 * CHAR_SCALE; // キャラの拡大に合わせて発射位置も上げる
+  // 発射位置の高さはキャラの大きさに合わせます（胸のあたり）
+  const charScale = (S.playerRig && S.playerRig.root.scale.x) || 1;
+  const y = 0.8 * charScale;
 
   const group = new THREE.Group();
   let mesh;
