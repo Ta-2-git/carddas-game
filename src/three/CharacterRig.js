@@ -75,7 +75,7 @@ export default class CharacterRig {
     this.transformed = false;
 
     this.disposed = false;
-    this._pending = new Set();
+    this._loading = {}; // 読み込み中のモーション（name -> Promise）
     this._loopOverride = false; // true の間、1回再生のモーションも終わったら繰り返す
   }
 
@@ -145,11 +145,31 @@ export default class CharacterRig {
     return true;
   }
 
-  /** 必要になったモーションだけ読み込みます（初回表示を軽くするため） */
-  async _loadMotion(name) {
-    if (this.actions[name] || this._pending.has(name)) return this.actions[name] || null;
+  /**
+   * 必要になったモーションだけ読み込みます（初回表示を軽くするため）。
+   * 先読みと再生要求が重なっても取りこぼさないよう、読み込み中の場合は
+   * 同じ Promise を返して「読み終わるまで待つ」ようにしています。
+   * （ここで null を返すと、呼び出し側が待機モーションへ差し替えてしまい、
+   *   必殺技や変身が再生されないことがありました）
+   */
+  _loadMotion(name) {
+    if (this.actions[name]) return Promise.resolve(this.actions[name]);
+    this._loading = this._loading || {};
+    if (this._loading[name]) return this._loading[name];
+    const p = this._loadMotionInner(name).then((action) => {
+      delete this._loading[name];
+      return action;
+    }, (err) => {
+      delete this._loading[name];
+      console.warn("[CharacterRig] モーションを読み込めません:", name, err);
+      return null;
+    });
+    this._loading[name] = p;
+    return p;
+  }
+
+  async _loadMotionInner(name) {
     const m = (this.config.motions || {})[name];
-    this._pending.add(name);
 
     let clip = null;
     if (m && m.file) {
@@ -159,7 +179,6 @@ export default class CharacterRig {
       clip = pickClip(this._builtinClips, m && m.clip);
     }
 
-    this._pending.delete(name);
     if (this.disposed || !clip || !this.mixer) return null;
 
     const THREE = this.THREE;
@@ -213,14 +232,26 @@ export default class CharacterRig {
       action.enabled = true;
       action.setEffectiveWeight(1);
       action.play();
-      if (prev && prev !== action && !opts.immediate) {
-        prev.crossFadeTo(action, FADE, false);
-      } else if (prev && prev !== action) {
-        prev.stop();
+      if (prev && prev !== action) {
+        // 再生し終わって最後のポーズで止まっている（paused）モーションは
+        // クロスフェードで薄れてくれないことがあるため、確実に止めます。
+        // これを取りこぼすと前のポーズが残り続けます（変身後に固まる原因）。
+        if (opts.immediate || prev.paused) prev.stop();
+        else prev.crossFadeTo(action, FADE, false);
       }
       this.currentAction = action;
       this.current = name;
       this._applyFacing(name);
+
+      // 1回再生のモーションは、経過時間でも終了を判定します。
+      // （finished イベントに取りこぼしがあっても必ず待機へ戻すため）
+      const meta = (this._motionMeta || {})[name] || {};
+      if (!meta.loop && !meta.hold) {
+        const ts = Math.abs(action.timeScale) || 1;
+        this._oneShotLeft = action.getClip().duration / ts;
+      } else {
+        this._oneShotLeft = -1;
+      }
 
       // 変身モーションならフレーム計測を開始
       this.transformElapsed = name === MOTION.TRANSFORM ? 0 : -1;
@@ -401,7 +432,16 @@ export default class CharacterRig {
       }
     }
 
-    // 1回再生の終了は mixer の finished イベントで拾っています
+    // --- 1回再生の終了判定（経過時間ベース） ---
+    // finished イベントも使っていますが、環境によって取りこぼすことがあるため
+    // 再生時間でも必ず待機へ戻します。
+    if (this._oneShotLeft > 0) {
+      this._oneShotLeft -= dt;
+      if (this._oneShotLeft <= 0) {
+        this._oneShotLeft = -1;
+        if (this.currentAction) this._handleFinished(this.currentAction);
+      }
+    }
   }
 
   // ---------------------------------------------------------

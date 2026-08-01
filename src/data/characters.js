@@ -123,11 +123,12 @@ export const CHARACTERS = {
       // という動きを持っているためです（向きは素材そのものに任せます）。
       kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false, trimEnd: 2.0, duration: 1.5, faceCamera: true, shotAt: 1.6 },
 
-      // 素材8.3秒のうち、2.6秒以降は向きが変わって静止するだけなので切り捨て。
-      // 素材の1.75秒で両手を相手方向へ伸ばしきる＝そこでかめはめ波が出ます。
-      // 全フレームを3秒で再生し切り、腕が伸びるのが約2秒、そこから1秒
-      // エネルギー波を出して着弾＝全体で約3秒になります。
-      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.6, duration: 3.0, faceCamera: true, shotAt: 1.75 },
+      // 素材8.3秒のうち、3.0秒以降は向きが変わって静止するだけなので切り捨て。
+      // 0〜3.0秒に「構え → 両手を相手方向へ伸ばしきる(1.75秒) → 腕を戻す」
+      // までが入っており、これを等速(3秒)でまるごと再生します。
+      // 腕が伸びきる1.75秒でかめはめ波を発射し、1秒見せてから着弾（2.75秒）。
+      // モーションの終わり(3.0秒)まで途中で切れません。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 3.0, duration: 3.0, faceCamera: true, shotAt: 1.75 },
 
       // 素材8.3秒のうち、6.0秒以降は静止するだけなので切り捨て。
       // 溜め〜気の爆発〜構え直しまでの全フレームを、2秒で再生し終えます。
