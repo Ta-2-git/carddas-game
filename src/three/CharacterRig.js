@@ -138,9 +138,11 @@ export default class CharacterRig {
       this._hipsRestY = p.y; // 立っているときの腰の高さ
     }
 
-    // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
-    // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
-    // オーラや他モーションの先読みを並行して進める
+    // まず待機モーションだけを確実に用意します。
+    // ここを他のモーションと同時にダウンロードすると帯域を奪い合って
+    // いつまでも棒立ち（素体のポーズのまま）になるため、必ず先に取ります。
+    await this._loadMotion(MOTION.IDLE);
+    if (this.disposed) return false;
     this.play(MOTION.IDLE, { immediate: true });
 
     // 読み込み前に指定されていたモーションがあれば、ここで再生します
@@ -151,15 +153,23 @@ export default class CharacterRig {
     }
 
     this._loadAuras(); // オーラは待たずに裏で読み込む
-
-    // 他のモーションも裏で先読みしておく（技を出す瞬間に読み込み待ちで
-    // 出遅れないように。FBXはファイルサイズが大きく数秒かかることがあるため）
-    for (const name of Object.values(MOTION)) {
-      if (name !== MOTION.IDLE) this._loadMotion(name);
-    }
+    this._preloadRest();
 
     if (this.onReady) this.onReady(this);
     return true;
+  }
+
+  /**
+   * 残りのモーションを裏で先読みします。
+   * モーション1本が十数MBあるため、同時に何本も落とすとどれも遅くなります。
+   * 1本ずつ順番に取得して、必要になった時に間に合うようにします。
+   */
+  async _preloadRest() {
+    for (const name of Object.values(MOTION)) {
+      if (name === MOTION.IDLE) continue;
+      if (this.disposed) return;
+      await this._loadMotion(name);
+    }
   }
 
   /**
@@ -192,7 +202,10 @@ export default class CharacterRig {
     if (m && m.file) {
       const clips = await loadClips(m.file);
       clip = pickClip(clips, m.clip);
-    } else if (name === MOTION.IDLE) {
+    }
+    // 待機モーションだけは、ファイルが無い/読み込めない場合でも
+    // 素体モデルに入っているアニメで代用します（棒立ちを避けるため）
+    if (!clip && name === MOTION.IDLE) {
       clip = pickClip(this._builtinClips, m && m.clip);
     }
 
@@ -289,10 +302,17 @@ export default class CharacterRig {
     const existing = this.actions[name];
     if (existing) { start(existing); return; }
 
-    // 未読み込みなら読み込んでから再生（間は待機のまま）
+    // 未読み込みなら、読み込みを待ってから再生します。
+    // この間も今のモーションは流れたままにします（棒立ちにしないため）。
+    const req = (this._playSeq = (this._playSeq || 0) + 1);
     this._loadMotion(name).then((action) => {
-      if (action) start(action);
-      else if (name !== MOTION.IDLE) this.play(MOTION.IDLE); // 用意されていなければ待機で代用
+      if (this.disposed) return;
+      // 待っている間に別のモーションが指定されていたら、そちらを優先します
+      if (req !== this._playSeq) return;
+      if (action) { start(action); return; }
+      // 読み込めなかった場合、何も再生していない時だけ待機で代用します。
+      // （再生中のモーションを消してしまうと素体のポーズで固まるため）
+      if (!this.currentAction && name !== MOTION.IDLE) this.play(MOTION.IDLE);
     });
   }
 
