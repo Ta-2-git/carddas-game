@@ -129,11 +129,11 @@ export default function BattleStage3D({
 
     // 自キャラは敵(+X側)を、敵キャラは自キャラ(-X側)を向くように固定する
     const playerRig = new CharacterRig({
-      cardId: playerCardId, isEnemy: false, facingYDeg: 90,
+      cardId: playerCardId, isEnemy: false, facingYDeg: 90, preloadAll: true,
       // モーションが腕を伸ばしきった瞬間に呼ばれます
       onShot: (motion) => { if (onPlayerShotRef.current) onPlayerShotRef.current(motion); },
     });
-    const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90 });
+    const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90, preloadAll: true });
     // 立ち位置と大きさは applyLayout で画面比率に合わせて設定します
     scene.add(playerRig.root, enemyRig.root);
     playerRig.load();

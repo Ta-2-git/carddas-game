@@ -131,6 +131,52 @@ export function loadClips(url) {
   return p;
 }
 
+// -------------------------------------------------------------
+//  素体モデルのキャッシュ
+// -------------------------------------------------------------
+//  素体GLBは6MB近くあり、毎回読み直すとカード選択のたびに数秒待たされます。
+//  一度読んだものを覚えておき、表示のたびに複製して使います。
+//  （骨付きモデルは SkeletonUtils.clone でないと正しく複製できません）
+// -------------------------------------------------------------
+const modelCache = new Map(); // url -> Promise<gltf>
+
+/** 素体モデルを読み込みます（キャッシュあり・複製前の共有インスタンス） */
+export function loadModel(url) {
+  if (!url) return Promise.reject(new Error("URLが空です"));
+  if (modelCache.has(url)) return modelCache.get(url);
+  const p = loadGLTF(url).catch((err) => {
+    modelCache.delete(url); // 失敗は覚えない
+    throw err;
+  });
+  modelCache.set(url, p);
+  return p;
+}
+
+/**
+ * 表示用に素体モデルを1体分用意します。
+ * 2体目以降はキャッシュから複製するので一瞬で出ます。
+ */
+export async function loadModelInstance(url) {
+  const THREE = window.THREE;
+  const canClone = THREE && THREE.SkeletonUtils && typeof THREE.SkeletonUtils.clone === "function";
+  if (canClone) {
+    const gltf = await loadModel(url);
+    return { scene: THREE.SkeletonUtils.clone(gltf.scene), animations: gltf.animations || [] };
+  }
+  // SkeletonUtils が無い場合は、骨を共有しないよう毎回読み直します
+  const gltf = await loadGLTF(url);
+  return { scene: gltf.scene, animations: gltf.animations || [] };
+}
+
+/** 先読み（失敗しても無視します） */
+export function preload(urls = []) {
+  for (const url of urls) {
+    if (!url) continue;
+    if (/\.(glb|gltf)(\?|$)/i.test(url)) loadModel(url).catch(() => {});
+    else loadClips(url);
+  }
+}
+
 /** 名前でクリップを選びます。名前未指定なら最初のクリップ */
 export function pickClip(clips, name) {
   if (!clips || clips.length === 0) return null;

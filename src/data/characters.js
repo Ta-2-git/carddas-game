@@ -237,6 +237,23 @@ export function has3DModel(cardId) {
  * @param {string} cardId
  * @param {string} motionName  MOTION.ULTIMATE / MOTION.KI_BLAST など
  */
+/**
+ * ゲーム開始時に先読みしておきたいファイル一覧。
+ * 素体モデルと待機モーションを先に取っておくと、
+ * カード選択で選んだ瞬間にキャラが動き出します。
+ */
+export function getPreloadUrls() {
+  const urls = [];
+  for (const id of Object.keys(CHARACTERS)) {
+    const c = getCharacter(id);
+    if (!c.model) continue;
+    urls.push(c.model);
+    const idle = (c.motions || {}).idle;
+    if (idle && idle.file) urls.push(idle.file);
+  }
+  return urls;
+}
+
 /** そのモーションの再生時間（秒）。設定が無ければ 0 を返します。 */
 export function getMotionPlaySeconds(cardId, motionName) {
   const m = (getCharacter(cardId).motions || {})[motionName] || {};

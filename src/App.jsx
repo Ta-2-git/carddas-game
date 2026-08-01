@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
-import { has3DModel, MOTION, getMotionShotDelay, getMotionPlaySeconds } from "./data/characters";
+import { has3DModel, MOTION, getMotionShotDelay, getMotionPlaySeconds, getPreloadUrls } from "./data/characters";
+import { preload } from "./three/gltfCache";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -1785,6 +1786,10 @@ const OwnedCardsScreen = ({ ownedCards, onBack }) => {
 };
 
 export default function App() {
+  // タイトル画面を見ている間に、素体モデルと待機モーションを取っておきます
+  // （カード選択で選んだ瞬間にキャラが動き出すようにするため）
+  useEffect(() => { preload(getPreloadUrls()); }, []);
+
   const [screen, setScreen] = useState("title");
   const [coins, setCoins] = useState(500);
   const [ownedCards, setOwnedCards] = useState(INITIAL_OWNED);

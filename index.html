@@ -21,6 +21,8 @@
     <!-- FBXLoaderが内部で使う圧縮解凍ライブラリ（FBXLoaderより先に読み込む必要あり） -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <!-- 読み込み済みモデルを複製するのに使います（毎回読み直さないため） -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
     <script>
       // GLTFLoader/FBXLoaderはすでにTHREE名前空間に登録される
     </script>

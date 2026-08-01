@@ -10,7 +10,7 @@
 //  普段このファイルを編集する必要はありません。
 // =============================================================
 
-import { loadGLTF, loadClips, pickClip, applyArmatureRotation } from "./gltfCache";
+import { loadGLTF, loadModelInstance, loadClips, pickClip, applyArmatureRotation } from "./gltfCache";
 import { createKiAura } from "./KiAura";
 import { getCharacter, MOTION } from "../data/characters";
 
@@ -49,7 +49,7 @@ function trimClip(THREE, clip, start, end) {
 }
 
 export default class CharacterRig {
-  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null, onShot = null }) {
+  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null, onShot = null, preloadAll = false }) {
     this.THREE = window.THREE;
     this.cardId = cardId;
     this.config = getCharacter(cardId);
@@ -57,6 +57,9 @@ export default class CharacterRig {
     this.onReady = onReady;
     // モーションが「腕を伸ばしきった瞬間」に呼ばれます（弾を出すタイミング）
     this.onShot = onShot;
+    // 対戦画面だけ、待機以外のモーションも先読みします。
+    // カード一覧などの表示では待機しか使わないので取りに行きません。
+    this.preloadAll = preloadAll;
     // 指定があれば cfg.camera.rotationY より優先して、この向き（度）で固定する
     // （BattleStage3Dのように「敵と向き合わせたい」場面で使う）
     this.facingYDeg = facingYDeg;
@@ -91,7 +94,8 @@ export default class CharacterRig {
 
     let gltf;
     try {
-      gltf = await loadGLTF(cfg.model);
+      // 2体目以降はキャッシュから複製されるので待ち時間がほぼありません
+      gltf = await loadModelInstance(cfg.model);
     } catch (e) {
       console.warn("[CharacterRig] 素体モデルを読み込めません:", cfg.model, e);
       return false;
@@ -153,7 +157,7 @@ export default class CharacterRig {
     }
 
     this._loadAuras(); // オーラは待たずに裏で読み込む
-    this._preloadRest();
+    if (this.preloadAll) this._preloadRest();
 
     if (this.onReady) this.onReady(this);
     return true;
