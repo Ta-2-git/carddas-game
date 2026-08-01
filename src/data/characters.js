@@ -117,13 +117,17 @@ export const CHARACTERS = {
       // このモーションに割り当てられ2回再生されていたためで、素材側は正常です。
       melee: { file: `${R2}/Goku_Combo.fbx`, loop: false },
 
-      kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false },
+      // 素材9.1秒のうち、2.0秒以降は撃った姿勢のまま5秒静止するので切り捨て。
+      // 素材の1.6秒で相手側へ腕を伸ばしきる＝そこで気弾が出ます。
+      // faceCamera を付けているのは、この素材が「正面向き→相手側へ振り向いて撃つ」
+      // という動きを持っているためです（向きは素材そのものに任せます）。
+      kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false, trimEnd: 2.0, duration: 1.5, faceCamera: true, shotAt: 1.6 },
 
-      // 素材8.3秒のうち、2.05秒以降は向きが変わって静止するだけなので切り捨て。
-      // 溜め〜腕を伸ばしきるまでの全フレームを、2秒で再生し終えます。
-      // 腕が伸びきる（＝かめはめ波が出る）のはその終わり際。
-      // 発射後さらに1秒エネルギー波を出し、全体で約3秒になります。
-      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.05, duration: 2.0, faceCamera: true, shotAt: 2.0 },
+      // 素材8.3秒のうち、2.6秒以降は向きが変わって静止するだけなので切り捨て。
+      // 素材の1.75秒で両手を相手方向へ伸ばしきる＝そこでかめはめ波が出ます。
+      // 全フレームを3秒で再生し切り、腕が伸びるのが約2秒、そこから1秒
+      // エネルギー波を出して着弾＝全体で約3秒になります。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 2.6, duration: 3.0, faceCamera: true, shotAt: 1.75 },
 
       // 素材8.3秒のうち、6.0秒以降は静止するだけなので切り捨て。
       // 溜め〜気の爆発〜構え直しまでの全フレームを、2秒で再生し終えます。
@@ -222,12 +226,15 @@ export function has3DModel(cardId) {
 }
 
 /**
- * 必殺技モーションを再生してから、実際にエネルギー波を撃つまでの秒数。
+ * モーションを再生してから、実際に弾（気弾・エネルギー波）が出るまでの秒数。
  * モーション設定の shotAt（素材のうち腕を伸ばしきる時刻）から、
  * trim と再生速度を考慮して逆算します。
+ *
+ * @param {string} cardId
+ * @param {string} motionName  MOTION.ULTIMATE / MOTION.KI_BLAST など
  */
-export function getUltimateShotDelay(cardId) {
-  const m = (getCharacter(cardId).motions || {}).ultimate || {};
+export function getMotionShotDelay(cardId, motionName) {
+  const m = (getCharacter(cardId).motions || {})[motionName] || {};
   if (!m.file || m.shotAt == null) return 0;
   const start = m.trimStart || 0;
   const trimmed = m.trimEnd != null ? m.trimEnd - start : null;

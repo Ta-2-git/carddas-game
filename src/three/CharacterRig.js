@@ -100,6 +100,13 @@ export default class CharacterRig {
     this.modelGroup.add(this.model);
     this.mixer = new THREE.AnimationMixer(this.model);
 
+    // 1回再生のモーションが終わったら待機へ戻す。
+    // （isRunning() の監視だとクランプ中の判定が当てにならないため、
+    //   mixer の finished イベントで確実に拾います）
+    this.mixer.addEventListener("finished", (e) => {
+      if (!this.disposed) this._handleFinished(e.action);
+    });
+
     // 素体GLBに入っているアニメも待機として使えるようにしておく
     this._builtinClips = gltf.animations || [];
 
@@ -112,6 +119,7 @@ export default class CharacterRig {
       this._baseYaw = this.isEnemy ? Math.PI + rot : rot;
     }
     this.model.rotation.y = this._baseYaw;
+    this._targetYaw = this._baseYaw;
 
     // 待機モーションもFBXだとサイズが大きく数秒かかることがあるため、
     // ここではブロックせずに読み込みつつ（読み込み中は素体がTポーズのまま）
@@ -250,9 +258,9 @@ export default class CharacterRig {
    * 画面の正面を向いて再生します。
    */
   _applyFacing(name) {
-    if (!this.model) return;
     const meta = (this._motionMeta || {})[name] || {};
-    this.model.rotation.y = meta.faceCamera ? 0 : (this._baseYaw || 0);
+    // 実際の回転は update() で少しずつ寄せます（急に向きが変わらないように）
+    this._targetYaw = meta.faceCamera ? 0 : (this._baseYaw || 0);
   }
 
   // ---------------------------------------------------------
@@ -345,6 +353,18 @@ export default class CharacterRig {
     if (this.disposed) return;
     if (this.mixer) this.mixer.update(dt);
 
+    // --- 向きをなめらかに変える ---
+    // 必殺技や気弾は素体の向きが変わるので、切り替え時に一瞬で
+    // 回らないよう少しずつ回します（その場でくるっと向き直る感じ）
+    if (this.model && this._targetYaw != null) {
+      const cur = this.model.rotation.y;
+      let diff = this._targetYaw - cur;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) < 0.002) this.model.rotation.y = this._targetYaw;
+      else this.model.rotation.y = cur + diff * Math.min(1, dt * 12);
+    }
+
     // --- 変身オーラの開始判定 ---
     if (this.transformElapsed >= 0) {
       this.transformElapsed += dt;
@@ -381,11 +401,7 @@ export default class CharacterRig {
       }
     }
 
-    // --- 1回再生の終了検知 ---
-    if (this.currentAction && !this.currentAction.isRunning() && this.current !== MOTION.IDLE) {
-      const meta = (this._motionMeta || {})[this.current] || {};
-      if (!meta.loop) this._handleFinished(this.currentAction);
-    }
+    // 1回再生の終了は mixer の finished イベントで拾っています
   }
 
   // ---------------------------------------------------------

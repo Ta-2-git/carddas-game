@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
-import { has3DModel, MOTION, getUltimateShotDelay } from "./data/characters";
+import { has3DModel, MOTION, getMotionShotDelay } from "./data/characters";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -995,6 +995,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [jankenResultLabel, setJankenResultLabel] = useState(null);
   const timerRef = useRef(null);
   const kaiokenActiveRef = useRef(startsWithKaioken);
+  // プレイヤーの通常攻撃の回数。近接と気弾を交互に出すために使います
+  const playerAttackCountRef = useRef(0);
   const [dragonBurstPhase, setDragonBurstPhase] = useState(null);
   const [dragonBurstMultiplier, setDragonBurstMultiplier] = useState(1);
   const dragonBurstMultiplierRef = useRef(1);
@@ -1307,7 +1309,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   }, []);
 
   const doAttack = (attacker, move, dmg, hand, eHand, isKaioken) => {
-    const needsDash = attacker === "player" && playerCard.isGoku && (move.id === "paper_punch" || move.id === "scissors_kick");
+    // 必殺技以外の攻撃は、近接攻撃と気弾攻撃をだいたい交互に出します
+    const isPlayerNormal = attacker === "player" && playerCard.isGoku && move.id !== "rock_kamehameha";
+    const useKiBlast = isPlayerNormal && playerAttackCountRef.current % 2 === 1;
+    if (isPlayerNormal) playerAttackCountRef.current += 1;
+    // 気弾は離れたまま撃つので、接近（ダッシュ）はしません
+    const needsDash = isPlayerNormal && !useKiBlast && (move.id === "paper_punch" || move.id === "scissors_kick");
     const kaiokenSelfDmg = (isKaioken && attacker === "player") ? 200 : 0;
     const afterHit = (frozenAnim, hitTarget) => {
       const fromHp = hitTarget === "enemy" ? enemyHpRef.current : playerHpRef.current;
@@ -1360,16 +1367,22 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setTimeout(() => { afterHit("punch", "enemy"); }, 1800);
       return;
     }
-    // 必殺技は「腕を伸ばしきった瞬間」にエネルギー波が出るよう、
+    // 弾を撃つ技は「腕を伸ばしきった瞬間」に出るよう、
     // モーション設定から発射タイミングを逆算します
     const isUltimate = attacker === "player" && playerCard.isGoku && move.id === "rock_kamehameha";
-    const ultimateShotMs = isUltimate ? Math.round(getUltimateShotDelay(playerCard.id) * 1000) : 0;
+    const shotMotion = isUltimate ? MOTION.ULTIMATE : (useKiBlast ? MOTION.KI_BLAST : null);
+    const shotMs = shotMotion ? Math.round(getMotionShotDelay(playerCard.id, shotMotion) * 1000) : 0;
+    // 撃ってから当たるまで（必殺技はエネルギー波を1秒見せる）
+    const travelMs = isUltimate ? 1000 : 500;
 
     if (attacker === "player") {
       if (playerCard.isGoku) {
-        if (move.id === "rock_kamehameha") {
+        if (isUltimate) {
           setPlayerAnim("beam");
-          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "ultimate" }), ultimateShotMs);
+          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "ultimate" }), shotMs);
+        } else if (useKiBlast) {
+          setPlayerAnim(MOTION.KI_BLAST);
+          setTimeout(() => setShot({ key: Date.now(), from: "player", kind: "kiBlast" }), shotMs);
         } else if (move.id === "scissors_kick") setPlayerAnim("kick");
         else setPlayerAnim("punch");
       } else setPlayerAnim("attack");
@@ -1381,8 +1394,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
-      // 必殺技は、腕を伸ばしきってから1秒エネルギー波を出したあとに着弾
-    }, isUltimate ? ultimateShotMs + 1000 : 700);
+    }, shotMotion ? shotMs + travelMs : 700);
   };
 
   const showRoundAnnounce = useCallback((roundNum, onDone) => {

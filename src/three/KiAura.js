@@ -110,11 +110,11 @@ export function createKiAura(THREE, opts = {}) {
   const boltColor = opts.boltColor || color;
   const opacity = opts.opacity != null ? opts.opacity : 0.95;
   // 素材は絵の周りに余白があり、実際に光って見えるのはタイルの約81%です。
-  // キャラ（足0.16〜頭1.13）をきちんと包めるよう、その分を見込んで大きめにします。
-  //   板の範囲   … y −0.22 〜 1.98
-  //   見える範囲 … y 0.0 〜 1.78（キャラ全体がしっかり収まる）
-  const height = opts.height || 2.2;
-  const centerY = opts.centerY != null ? opts.centerY : 0.88;
+  // 足元まで確実に包めるよう、その分を見込んで大きめ＆やや下寄りにします。
+  //   板の範囲   … y −0.45 〜 2.05
+  //   見える範囲 … y −0.23 〜 1.83（足元が地面より下から立ち上がる）
+  const height = opts.height || 2.5;
+  const centerY = opts.centerY != null ? opts.centerY : 0.80;
   const width = height * AURA_SHEET.aspect;
 
   const group = new THREE.Group();
