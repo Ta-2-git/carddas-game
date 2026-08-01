@@ -79,7 +79,9 @@ export const DEFAULT_CHARACTER = {
     melee:         { file: "", loop: false },
     kiBlast:       { file: "", loop: false },
     ultimate:      { file: "", loop: false },
-    transform:     { file: "", loop: false, hold: true },
+    // hold は付けません。付けると再生後に最後のポーズで固まったままになり、
+    // 待機モーションへ戻らなくなります（オーラは別管理なので消えません）。
+    transform:     { file: "", loop: false },
     hitByMelee:    { file: "", loop: false },
     hitByKiBlast:  { file: "", loop: false },
     hitByUltimate: { file: "", loop: false },
@@ -235,6 +237,15 @@ export function has3DModel(cardId) {
  * @param {string} cardId
  * @param {string} motionName  MOTION.ULTIMATE / MOTION.KI_BLAST など
  */
+/** そのモーションの再生時間（秒）。設定が無ければ 0 を返します。 */
+export function getMotionPlaySeconds(cardId, motionName) {
+  const m = (getCharacter(cardId).motions || {})[motionName] || {};
+  if (!m.file) return 0;
+  if (m.duration) return m.duration;
+  if (m.trimEnd != null) return (m.trimEnd - (m.trimStart || 0)) / (m.speed || 1);
+  return 0; // 素材の長さは読み込むまで分からないので、呼び出し側で既定値を使ってください
+}
+
 export function getMotionShotDelay(cardId, motionName) {
   const m = (getCharacter(cardId).motions || {})[motionName] || {};
   if (!m.file || m.shotAt == null) return 0;

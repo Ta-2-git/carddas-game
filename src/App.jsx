@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
-import { has3DModel, MOTION, getMotionShotDelay } from "./data/characters";
+import { has3DModel, MOTION, getMotionShotDelay, getMotionPlaySeconds } from "./data/characters";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -1056,6 +1056,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           const kaiokenAtk = Math.floor(playerCard.atk * 1.5); setZoomPlayerAtk(kaiokenAtk); setPlayerCurrentAtk(kaiokenAtk);
           // カード説明を見せ終えたこのタイミングで変身モーションを再生します
           setZoomPlayerAnim(MOTION.TRANSFORM); setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
+          // 変身が終わったら必ず待機モーションへ戻します
+          const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+          T(() => { setZoomPlayerAnim("idle"); setPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300);
         }
         else if (startsWithSSJ) { const ssjAtk = Math.floor(playerCard.atk * 1.5); const ssjHp = Math.floor(playerCard.hp * 1.5); setPlayerHp(ssjHp); playerHpRef.current = ssjHp; setPlayerMaxHp(ssjHp); setPlayerDisplayHp(ssjHp); setPlayerCurrentAtk(ssjAtk); setZoomPlayerAtk(ssjAtk); setZoomPlayerHp(ssjHp); gotenksLevelRef.current = 1; setGotenksLevel(1); setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300); }
@@ -1444,7 +1447,10 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       kaiokenActiveRef.current = true; setKaiokenActive(true);
       setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
       setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
-      kaiokenDelay = 2400; // 変身モーション(2秒)＋余韻
+      const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+      // 変身が終わったら必ず待機モーションへ戻します
+      setTimeout(() => setPlayerAnim("idle"), tms + 50);
+      kaiokenDelay = tms + 400; // 変身モーション＋余韻
     }
 
     const startRound = () => {
