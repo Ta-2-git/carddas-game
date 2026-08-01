@@ -29,19 +29,14 @@ function getFBXLoader() {
 // -------------------------------------------------------------
 //  FBXモーションを素体（GLB）の骨へ移すときの向き補正
 // -------------------------------------------------------------
-//  BlenderからZ-upのまま書き出したFBXは、キャラを立たせるための回転が
-//  アーマチュア（ボーンの親グループ）側に入っています。
-//  例: Armature001.quaternion = (-0.7071, 0, 0, 0.7071) = X軸 -90度
-//
-//  アニメーションだけを取り出して素体の骨に流し込むと、この親側の回転が
-//  抜け落ちるため、キャラが前のめりに倒れた状態で再生されます
-//  （近接攻撃が地面に向かって出ているように見えるのはこれが原因）。
-//
-//  そこで、親グループの回転をルートボーン(Hips)のトラックへ焼き込みます。
-//  ・position … 回転を掛けて座標系を合わせる
-//  ・quaternion… 回転を「前から」掛ける（合成）。
-//    ここで R*q*R⁻¹ のような共役変換にすると回転角が変わらないため、
-//    倒れたままになるので注意。
+//  Blenderの書き出し設定によって、モーションが「そのまま使える向き」で
+//  出てくる場合と、アーマチュア（ボーンの親）側の回転が必要な場合が
+//  あります。
+//    ・メッシュ込みで書き出したFBX … 親の回転(X軸-90度)を焼き込む必要あり
+//    ・アーマチュアのみのFBX       … そのままで正しい
+//  どちらで書き出されても動くよう、ここでは補正を「適用せずに」
+//  素のクリップと親の回転を返し、実際に必要かどうかは CharacterRig 側で
+//  素体の骨に当ててみて判定します。
 // -------------------------------------------------------------
 const FBX_ROOT_BONE = "Hips";
 
@@ -57,13 +52,18 @@ function getArmatureQuaternion(object) {
   return q;
 }
 
-function bakeArmatureRotation(clip, R) {
+/**
+ * ルートボーンのトラックに親の回転を焼き込んだ、新しいクリップを返します。
+ * 元のクリップは書き換えません（キャッシュを壊さないため）。
+ */
+export function applyArmatureRotation(clip, R) {
   const THREE = window.THREE;
-  if (!THREE) return clip;
+  if (!THREE || !R) return clip;
+  const out = clip.clone();
   const v = new THREE.Vector3();
   const q = new THREE.Quaternion();
 
-  for (const track of clip.tracks) {
+  for (const track of out.tracks) {
     if (track.name === `${FBX_ROOT_BONE}.position`) {
       for (let i = 0; i < track.times.length; i++) {
         const o = i * 3;
@@ -79,7 +79,7 @@ function bakeArmatureRotation(clip, R) {
       }
     }
   }
-  return clip;
+  return out;
 }
 
 /** GLB/FBX を読み込んで { scene, animations } を返します（キャッシュなし） */
@@ -91,9 +91,12 @@ export function loadGLTF(url) {
       const loader = getFBXLoader();
       if (!loader) { reject(new Error("THREE.FBXLoader が読み込まれていません")); return; }
       loader.load(url, (object) => {
-        const R = getArmatureQuaternion(object);
-        (object.animations || []).forEach((clip) => bakeArmatureRotation(clip, R));
-        resolve({ scene: object, animations: object.animations || [] });
+        // 補正はここでは掛けません（必要かどうかは CharacterRig が判定します）
+        resolve({
+          scene: object,
+          animations: object.animations || [],
+          armatureQuaternion: getArmatureQuaternion(object),
+        });
       }, undefined, reject);
       return;
     }
@@ -105,19 +108,23 @@ export function loadGLTF(url) {
 }
 
 /**
- * GLB/FBX からアニメーションクリップだけを取り出します（キャッシュあり）。
+ * GLB/FBX からアニメーションを取り出します（キャッシュあり）。
+ * { clips, armatureQuaternion } を返します。
  * クリップは書き換えないので、複数キャラで共有しても問題ありません。
  */
 export function loadClips(url) {
-  if (!url) return Promise.resolve([]);
+  if (!url) return Promise.resolve({ clips: [], armatureQuaternion: null });
   if (clipCache.has(url)) return clipCache.get(url);
 
   const p = loadGLTF(url)
-    .then((gltf) => gltf.animations || [])
+    .then((gltf) => ({
+      clips: gltf.animations || [],
+      armatureQuaternion: gltf.armatureQuaternion || null,
+    }))
     .catch((err) => {
       console.warn("[gltfCache] 読み込み失敗:", url, err);
       clipCache.delete(url); // 失敗は覚えない（次回リトライできる）
-      return [];
+      return { clips: [], armatureQuaternion: null };
     });
 
   clipCache.set(url, p);

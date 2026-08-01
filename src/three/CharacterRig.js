@@ -10,7 +10,7 @@
 //  普段このファイルを編集する必要はありません。
 // =============================================================
 
-import { loadGLTF, loadClips, pickClip } from "./gltfCache";
+import { loadGLTF, loadClips, pickClip, applyArmatureRotation } from "./gltfCache";
 import { createKiAura } from "./KiAura";
 import { getCharacter, MOTION } from "../data/characters";
 
@@ -160,6 +160,56 @@ export default class CharacterRig {
   }
 
   /**
+   * モーションの向きを素体に合わせます。
+   *
+   * Blenderの書き出し設定によって、そのまま使える場合と、アーマチュアの
+   * 回転（X軸-90度など）を焼き込む必要がある場合があります。
+   * 決め打ちにすると書き出し方を変えた途端に破綻するため、
+   * 最初の1回だけ実際に素体の骨へ当ててみて、
+   * 「頭が腰より上に来る方」を採用します。
+   */
+  _orientClip(rawClip, armatureQuaternion) {
+    if (!armatureQuaternion) return rawClip;
+
+    if (this._axisFix == null) {
+      this._axisFix = this._detectAxisFix(rawClip, armatureQuaternion);
+      console.info(
+        "[CharacterRig] モーションの向き補正:",
+        this._axisFix ? "あり（メッシュ込み書き出し）" : "なし（アーマチュアのみ書き出し）"
+      );
+    }
+    return this._axisFix ? applyArmatureRotation(rawClip, armatureQuaternion) : rawClip;
+  }
+
+  /** 補正あり/なしを実際に当てて比べ、正しく立つ方を選びます */
+  _detectAxisFix(rawClip, R) {
+    const THREE = this.THREE;
+    if (!this._hipsBone || !this._headBone || !this.model) return false;
+
+    const uprightness = (clip) => {
+      const mixer = new THREE.AnimationMixer(this.model);
+      const action = mixer.clipAction(clip);
+      action.play();
+      mixer.setTime(0);
+      this.model.updateMatrixWorld(true);
+      const hips = new THREE.Vector3();
+      const head = new THREE.Vector3();
+      this._hipsBone.getWorldPosition(hips);
+      this._headBone.getWorldPosition(head);
+      action.stop();
+      mixer.uncacheClip(clip);
+      mixer.uncacheRoot(this.model);
+      return head.y - hips.y; // 頭が腰よりどれだけ上か
+    };
+
+    let plain = -Infinity;
+    let fixed = -Infinity;
+    try { plain = uprightness(rawClip); } catch (e) { /* 判定できなければ補正なし扱い */ }
+    try { fixed = uprightness(applyArmatureRotation(rawClip, R)); } catch (e) { /* 同上 */ }
+    return fixed > plain;
+  }
+
+  /**
    * 残りのモーションを裏で先読みします。
    * モーション1本が十数MBあるため、同時に何本も落とすとどれも遅くなります。
    * 1本ずつ順番に取得して、必要になった時に間に合うようにします。
@@ -200,8 +250,9 @@ export default class CharacterRig {
 
     let clip = null;
     if (m && m.file) {
-      const clips = await loadClips(m.file);
-      clip = pickClip(clips, m.clip);
+      const data = await loadClips(m.file);
+      const raw = pickClip(data.clips, m.clip);
+      if (raw) clip = this._orientClip(raw, data.armatureQuaternion);
     }
     // 待機モーションだけは、ファイルが無い/読み込めない場合でも
     // 素体モデルに入っているアニメで代用します（棒立ちを避けるため）

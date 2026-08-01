@@ -117,23 +117,24 @@ export const CHARACTERS = {
       // このモーションに割り当てられ2回再生されていたためで、素材側は正常です。
       melee: { file: `${R2}/Goku_Combo.fbx`, loop: false },
 
-      // 素材9.1秒のうち、2.0秒以降は撃った姿勢のまま5秒静止するので切り捨て。
-      // 素材の1.6秒で相手側へ腕を伸ばしきる＝そこで気弾が出ます。
-      // faceCamera を付けているのは、この素材が「正面向き→相手側へ振り向いて撃つ」
-      // という動きを持っているためです（向きは素材そのものに任せます）。
-      kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false, trimEnd: 2.0, duration: 1.5, faceCamera: true, shotAt: 1.6 },
+      // ↓ 数値はすべて、実際の素材を素体の骨に当てて計測した値です。
+      //   素材を差し替えたら測り直してください。
 
-      // 素材8.3秒のうち、3.0秒以降は向きが変わって静止するだけなので切り捨て。
-      // 0〜3.0秒に「構え → 両手を相手方向へ伸ばしきる(1.75秒) → 腕を戻す」
-      // までが入っており、これを等速(3秒)でまるごと再生します。
-      // 腕が伸びきる1.75秒でかめはめ波を発射し、1秒見せてから着弾（2.75秒）。
-      // モーションの終わり(3.0秒)まで途中で切れません。
-      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 3.0, duration: 3.0, faceCamera: true, shotAt: 1.75 },
+      // 素材9.1秒。1.5秒で相手側へ腕を伸ばしきって気弾が出て、
+      // そのあと5秒以上その姿勢のまま静止するので2.0秒で切り捨て。
+      // faceCamera は「正面向き→相手側へ振り向いて撃つ」動きが素材に
+      // 入っているため、向きを素材に任せる指定です。
+      kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false, trimEnd: 2.0, duration: 1.5, faceCamera: true, shotAt: 1.5 },
 
-      // 素材8.3秒のうち、6.0秒以降は静止するだけなので切り捨て。
-      // 溜め〜気の爆発〜構え直しまでの全フレームを、2秒で再生し終えます。
-      // hold は付けません（再生後は待機モーションに戻す。オーラは別管理なので消えません）
-      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 6.0, duration: 2.0, faceCamera: true },
+      // 素材8.3秒。0〜4.75秒が溜め、5.0秒で相手方向へ腕を伸ばしきって
+      // かめはめ波が出る。6.5秒までを3秒に詰めて全フレーム再生する。
+      // 発射は再生2.3秒、そこから1秒見せて着弾＝全体で約3.3秒。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 6.5, duration: 3.0, faceCamera: true, shotAt: 5.0 },
+
+      // 素材8.3秒。3.0秒で気が爆発して立ち上がる（腰が0.73→0.78に上がる）。
+      // 5.5秒までを2秒に詰めて全フレーム再生する。
+      // hold は付けません（再生後は待機へ戻す。オーラは別管理なので消えません）
+      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 5.5, duration: 2.0, faceCamera: true },
 
       hitByMelee:    { file: `${R2}/Goku_Receive.fbx`, loop: false },
       hitByKiBlast:  { file: "", loop: false },
@@ -146,10 +147,10 @@ export const CHARACTERS = {
     // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
     // 界王拳が続くあいだはずっと出したままにします。
     // startFrame は「変身モーション開始から何フレーム目で出すか」。
-    // 気が爆発するのは素材の3.0秒＝2秒に詰めた再生だと約1.0秒＝30フレーム目です。
+    // 気が爆発するのは素材の3.0秒。2秒に詰めた再生では約1.09秒＝33フレーム目です。
     aura: {
       normal:      { enabled: false },
-      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 30, thunder: true },
+      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 33, thunder: true },
       reverted:    { enabled: false },
     },
   },
