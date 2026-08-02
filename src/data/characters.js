@@ -147,16 +147,16 @@ export const CHARACTERS = {
 
     // かめはめ波は動画エフェクトを使います（public/kamehameha.mp4）。
     // 黒背景の動画を加算合成で重ねるので、黒い部分は自然に透けます。
-    //   videoWidth   : 表示する幅（キャラの大きさ倍率が掛かります）
+    //   videoSpan    : 2人の間の距離の何倍の幅で出すか（1.15＝少しはみ出す）
     //   videoAspect  : 動画の縦横比（1920x1080 なので 16/9）
-    //   videoDuration: 動画の長さ（秒）。これを過ぎたら消します
+    //   videoDuration: 動画の長さ（秒）。実際の長さが読めればそちらを優先します
     //   videoOffsetX / videoOffsetY : 位置の微調整
     ultimate: {
       model: "", color: "#7fd4ff", effect: "beam", scale: 1.0, speed: 9,
       video: "/kamehameha.mp4",
       videoAspect: 16 / 9,
-      videoWidth: 4.2,
-      videoDuration: 2.2,
+      videoSpan: 1.15,
+      videoDuration: 2.17,
       videoOffsetX: 0,
       videoOffsetY: 0,
     },

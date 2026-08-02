@@ -310,8 +310,12 @@ function spawnVideoShot(S, shot, spec, place) {
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
 
+  // 大きさは「2人の間の距離」に合わせます。
+  // 動画のビームは左端(約5%)から右端(約99%)まで伸びるので、
+  // 少し広め(既定1.15倍)にするとちょうど相手まで届きます。
   const aspect = spec.videoAspect || 16 / 9;
-  const width = (spec.videoWidth || 4.2) * place.charScale;
+  const span = 2 * (S.spread || SPREAD_WIDE);
+  const width = span * (spec.videoSpan || 1.15);
   const height = width / aspect;
 
   const mesh = new THREE.Mesh(
@@ -325,8 +329,8 @@ function spawnVideoShot(S, shot, spec, place) {
     })
   );
 
-  // 撃つ人と相手のあいだに置き、相手側へ向けます
-  const midX = (place.startX + place.endX) / 2 + (spec.videoOffsetX || 0) * (place.fromPlayer ? 1 : -1);
+  // 2人のちょうど真ん中に置きます（動画のビームがほぼ左右対称なため）
+  const midX = (spec.videoOffsetX || 0) * (place.fromPlayer ? 1 : -1);
   mesh.position.set(midX, place.y + (spec.videoOffsetY || 0), 0.15);
   if (!place.fromPlayer) mesh.scale.x = -1; // 敵が撃つときは左右反転
 
@@ -344,7 +348,8 @@ function spawnVideoShot(S, shot, spec, place) {
     from: shot.from,
     kind: shot.kind,
     life: 0,
-    duration: spec.videoDuration || 2.2,
+    // 実際の動画の長さを優先します（読めない場合は設定値）
+    duration: (isFinite(video.duration) && video.duration > 0) ? video.duration : (spec.videoDuration || 2.2),
     hit: false,
   });
 }
