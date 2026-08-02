@@ -301,6 +301,65 @@ export function preloadShotVideo(url) {
   if (url) getVideo(url);
 }
 
+// 動画の黒背景を「明るさ」で抜くマテリアル。
+//
+// canvasは背景画像を透かすため透過設定にしています。
+// この状態で加算合成だけに頼ると、色は足されなくてもアルファが
+// 書き込まれてしまい、板の四角がまるごと黒く見えてしまいます。
+// そこで明るさから透明度を作り、暗い画素は discard で完全に捨てます
+// （何も書き込まないのでアルファも残りません）。
+// あわせて浮いている黒の分を引いて、暗部が灰色に濁らないようにします。
+const VIDEO_VERT = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const VIDEO_FRAG = `
+precision mediump float;
+varying vec2 vUv;
+uniform sampler2D uMap;
+uniform float uKeyLow;   // これ以下の明るさは完全に透明
+uniform float uKeyHigh;  // これ以上の明るさは完全に不透明
+uniform float uOpacity;
+uniform float uBoost;    // 明るさの強調
+
+void main() {
+  vec3 c = texture2D(uMap, vUv).rgb;
+  float lum = max(max(c.r, c.g), c.b);
+
+  float a = smoothstep(uKeyLow, uKeyHigh, lum);
+  if (a <= 0.001) discard;
+
+  // 浮いている黒の分を引いて伸ばす（暗部が灰色にならないように）
+  vec3 rgb = max(c - vec3(uKeyLow), vec3(0.0)) / max(1.0 - uKeyLow, 0.001);
+
+  gl_FragColor = vec4(rgb * uBoost, a * uOpacity);
+}
+`;
+
+function makeVideoMaterial(THREE, tex, spec) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: tex },
+      // 実測: 背景の黒は 0〜3/255（ほぼ完全な黒）。
+      // 0.05(≒13/255)より暗い所を捨てれば、光の裾を残したまま背景を消せます。
+      uKeyLow: { value: spec.videoKeyLow != null ? spec.videoKeyLow : 0.05 },
+      uKeyHigh: { value: spec.videoKeyHigh != null ? spec.videoKeyHigh : 0.22 },
+      uOpacity: { value: 1 },
+      uBoost: { value: spec.videoBoost != null ? spec.videoBoost : 1.0 },
+    },
+    vertexShader: VIDEO_VERT,
+    fragmentShader: VIDEO_FRAG,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+}
+
 function spawnVideoShot(S, shot, spec, place) {
   const THREE = S.THREE;
   const video = getVideo(spec.video);
@@ -320,13 +379,7 @@ function spawnVideoShot(S, shot, spec, place) {
 
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      blending: THREE.AdditiveBlending, // 黒が透ける
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    })
+    makeVideoMaterial(THREE, tex, spec)
   );
 
   // 2人のちょうど真ん中に置きます（動画のビームがほぼ左右対称なため）
@@ -456,9 +509,9 @@ function updateShots(S, dt, onShotHit) {
         s.hit = true;
         if (onShotHit) onShotHit({ from: s.from, kind: s.kind });
       }
-      // 終わり際はふわっと消します
+      // 終わり際はふわっと消します（ShaderMaterialなのでuniformで指定）
       const left = s.duration - s.life;
-      if (left < 0.35) s.group.material.opacity = Math.max(0, left / 0.35);
+      if (left < 0.35) s.group.material.uniforms.uOpacity.value = Math.max(0, left / 0.35);
       if (s.life >= s.duration) {
         S.scene.remove(s.group);
         s.group.geometry.dispose();
