@@ -341,11 +341,11 @@ void main() {
 `;
 
 function makeVideoMaterial(THREE, tex, spec) {
-  return new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms: {
       uMap: { value: tex },
-      // 実測: 背景の黒は 0〜3/255（ほぼ完全な黒）。
-      // 0.05(≒13/255)より暗い所を捨てれば、光の裾を残したまま背景を消せます。
+      // 実測: 背景の黒は 0〜3/255。ただし輝度16〜64の薄暗い青の靄が
+      // 全体の約25%あるため、それも光としてだけ足す（下記のブレンド設定）。
       uKeyLow: { value: spec.videoKeyLow != null ? spec.videoKeyLow : 0.05 },
       uKeyHigh: { value: spec.videoKeyHigh != null ? spec.videoKeyHigh : 0.22 },
       uOpacity: { value: 1 },
@@ -354,10 +354,22 @@ function makeVideoMaterial(THREE, tex, spec) {
     vertexShader: VIDEO_VERT,
     fragmentShader: VIDEO_FRAG,
     transparent: true,
-    blending: THREE.AdditiveBlending,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
+
+  // canvas は alpha:true（背景画像はCSS側）なので、通常の AdditiveBlending だと
+  // RGBだけでなくアルファまで加算され、暗い所でも canvas が不透明になって
+  // 背景を覆い隠す＝「黒い背景が残る」状態になる。
+  // そこでRGBのみ加算し、アルファは書き換えない合成にする。
+  mat.blending = THREE.CustomBlending;
+  mat.blendEquation = THREE.AddEquation;
+  mat.blendSrc = THREE.SrcAlphaFactor;
+  mat.blendDst = THREE.OneFactor;
+  mat.blendEquationAlpha = THREE.AddEquation;
+  mat.blendSrcAlpha = THREE.ZeroFactor;
+  mat.blendDstAlpha = THREE.OneFactor;
+  return mat;
 }
 
 function spawnVideoShot(S, shot, spec, place) {
