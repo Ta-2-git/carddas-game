@@ -81,6 +81,8 @@ export default class CharacterRig {
 
     this.disposed = false;
     this._loading = {}; // 読み込み中のモーション（name -> Promise）
+    this._variants = {}; // 素体モデル（normal / transformed）
+    this._activeKey = null;
     this._loopOverride = false; // true の間、1回再生のモーションも終わったら繰り返す
   }
 
@@ -102,16 +104,8 @@ export default class CharacterRig {
     }
     if (this.disposed) return false;
 
-    this.model = gltf.scene;
-    this.modelGroup.add(this.model);
-    this.mixer = new THREE.AnimationMixer(this.model);
-
-    // 1回再生のモーションが終わったら待機へ戻す。
-    // （isRunning() の監視だとクランプ中の判定が当てにならないため、
-    //   mixer の finished イベントで確実に拾います）
-    this.mixer.addEventListener("finished", (e) => {
-      if (!this.disposed) this._handleFinished(e.action);
-    });
+    this._installModel("normal", gltf.scene);
+    this._activateModel("normal");
 
     // 素体GLBに入っているアニメも待機として使えるようにしておく
     this._builtinClips = gltf.animations || [];
@@ -131,20 +125,16 @@ export default class CharacterRig {
     this.modelGroup.rotation.y = this._baseYaw;
     this._targetYaw = this._baseYaw;
 
-    // オーラを体に追従させるための骨（倒れたらオーラも一緒に倒れます）
-    this.model.updateMatrixWorld(true);
-    this._hipsBone = null; this._headBone = null;
-    this.model.traverse((o) => {
-      if (!o.isBone) return;
-      if (!this._hipsBone && o.name === "Hips") this._hipsBone = o;
-      if (!this._headBone && o.name === "Head") this._headBone = o;
-    });
+    this._findBones();
     if (this._hipsBone) {
       const p = new THREE.Vector3();
       this._hipsBone.getWorldPosition(p);
       this.root.worldToLocal(p);
       this._hipsRestY = p.y; // 立っているときの腰の高さ
     }
+
+    // 変身後のモデルがあれば裏で用意しておきます（変身時に待たせないため）
+    if (cfg.transformedModel) this._prepareTransformedModel(cfg.transformedModel);
 
     // まず待機モーションだけを確実に用意します。
     // ここを他のモーションと同時にダウンロードすると帯域を奪い合って
@@ -165,6 +155,71 @@ export default class CharacterRig {
 
     if (this.onReady) this.onReady(this);
     return true;
+  }
+
+  // ---------------------------------------------------------
+  //  素体モデル（通常 / 変身後）の管理
+  // ---------------------------------------------------------
+  /** 読み込んだモデルを登録します（まだ表示はしません） */
+  _installModel(key, scene) {
+    const THREE = this.THREE;
+    const mixer = new THREE.AnimationMixer(scene);
+    mixer.addEventListener("finished", (e) => {
+      // 表示中のモデルのものだけ扱います（裏に控えているモデルは無視）
+      if (!this.disposed && this._variants[this._activeKey] &&
+          this._variants[this._activeKey].mixer === mixer) {
+        this._handleFinished(e.action);
+      }
+    });
+    scene.visible = false;
+    this.modelGroup.add(scene);
+    this._variants[key] = { scene, mixer, actions: {} };
+  }
+
+  /** 表示するモデルを切り替えます */
+  _activateModel(key) {
+    const v = this._variants[key];
+    if (!v || this._activeKey === key) return;
+
+    for (const k of Object.keys(this._variants)) {
+      this._variants[k].scene.visible = k === key;
+    }
+    this._activeKey = key;
+    this.model = v.scene;
+    this.mixer = v.mixer;
+    this.actions = v.actions;
+    this.currentAction = null;
+    this._findBones();
+
+    // 今のモーションを新しいモデルでも続けて再生します
+    const cur = this.current;
+    this.current = null;
+    if (cur) this.play(cur, { immediate: true });
+    else this.play(MOTION.IDLE, { immediate: true });
+  }
+
+  _findBones() {
+    if (!this.model) return;
+    this.model.updateMatrixWorld(true);
+    this._hipsBone = null; this._headBone = null;
+    this.model.traverse((o) => {
+      if (!o.isBone) return;
+      if (!this._hipsBone && o.name === "Hips") this._hipsBone = o;
+      if (!this._headBone && o.name === "Head") this._headBone = o;
+    });
+  }
+
+  /** 変身後のモデルを裏で読み込んでおきます */
+  async _prepareTransformedModel(url) {
+    try {
+      const gltf = await loadModelInstance(url);
+      if (this.disposed || this._variants.transformed) return;
+      this._installModel("transformed", gltf.scene);
+      // 読み込み前に変身していた場合は、ここで反映します
+      if (this.transformed && this.auraMode === "transformed") this._applyModelForState();
+    } catch (e) {
+      console.warn("[CharacterRig] 変身後モデルを読み込めません:", url, e);
+    }
   }
 
   /**
@@ -255,30 +310,35 @@ export default class CharacterRig {
 
   async _loadMotionInner(name) {
     const m = (this.config.motions || {})[name];
+    const THREE = this.THREE;
 
-    let clip = null;
-    if (m && m.file) {
-      const data = await loadClips(m.file);
-      const raw = pickClip(data.clips, m.clip);
-      if (raw) clip = this._orientClip(raw, data.armatureQuaternion);
-    }
-    // 待機モーションだけは、ファイルが無い/読み込めない場合でも
-    // 素体モデルに入っているアニメで代用します（棒立ちを避けるため）
-    if (!clip && name === MOTION.IDLE) {
-      clip = pickClip(this._builtinClips, m && m.clip);
+    // 一度用意したクリップは覚えておきます。
+    // （変身でモデルを入れ替えても、切り出しをやり直さずに済みます）
+    this._clips = this._clips || {};
+    let clip = this._clips[name] || null;
+
+    if (!clip) {
+      if (m && m.file) {
+        const data = await loadClips(m.file);
+        const raw = pickClip(data.clips, m.clip);
+        if (raw) clip = this._orientClip(raw, data.armatureQuaternion);
+      }
+      // 待機モーションだけは、ファイルが無い/読み込めない場合でも
+      // 素体モデルに入っているアニメで代用します（棒立ちを避けるため）
+      if (!clip && name === MOTION.IDLE) {
+        clip = pickClip(this._builtinClips, m && m.clip);
+      }
+      if (clip && m && (m.trimStart != null || m.trimEnd != null)) {
+        // trimStart / trimEnd（秒）で使う範囲を切り出します。
+        // 素材の前後にある不要な部分（助走のパンチ、最後の静止など）を落とす用です。
+        const s = Math.max(0, m.trimStart || 0);
+        const e = Math.min(clip.duration, m.trimEnd != null ? m.trimEnd : clip.duration);
+        if (e > s) clip = trimClip(THREE, clip, s, e);
+      }
+      if (clip) this._clips[name] = clip;
     }
 
     if (this.disposed || !clip || !this.mixer) return null;
-
-    const THREE = this.THREE;
-
-    // trimStart / trimEnd（秒）で使う範囲を切り出します。
-    // 素材の前後にある不要な部分（助走のパンチ、最後の静止など）を落とす用です。
-    if (m && (m.trimStart != null || m.trimEnd != null)) {
-      const s = Math.max(0, m.trimStart || 0);
-      const e = Math.min(clip.duration, m.trimEnd != null ? m.trimEnd : clip.duration);
-      if (e > s) clip = trimClip(THREE, clip, s, e);
-    }
 
     const action = this.mixer.clipAction(clip);
     const loop = m ? m.loop !== false : true;
@@ -482,9 +542,16 @@ export default class CharacterRig {
     if (!on) {
       this.auraMode = "reverted";
       this._applyAuraVisibility();
+      this._applyModelForState(); // 解除時は見た目もすぐ元に戻す
     }
-    // on の場合は「変身モーションの startFrame に到達したら」出すので
-    // ここでは切り替えません（update 内で処理）
+    // on の場合、オーラとモデルは「変身モーションの startFrame に到達したら」
+    // 同時に切り替えます（update 内で処理）
+  }
+
+  /** 変身状態に合わせて、表示するモデルを選びます */
+  _applyModelForState() {
+    const want = this.transformed && this._variants.transformed ? "transformed" : "normal";
+    if (this._variants[want]) this._activateModel(want);
   }
 
   // ---------------------------------------------------------
@@ -517,6 +584,7 @@ export default class CharacterRig {
           this.transformed = true;
           this.auraMode = "transformed";
           this._applyAuraVisibility();
+          this._applyModelForState(); // 気が爆発する瞬間にモデルも入れ替える
         }
       }
     } else if (this.transformed && this.auraMode !== "transformed" && this.auraMeshes.transformed) {
@@ -524,6 +592,7 @@ export default class CharacterRig {
       // 変身状態である限りオーラを出し続けます
       this.auraMode = "transformed";
       this._applyAuraVisibility();
+      this._applyModelForState();
     }
 
     // --- オーラを体に追従させる ---

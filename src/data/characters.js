@@ -96,11 +96,12 @@ export const DEFAULT_CHARACTER = {
 };
 
 // =============================================================
-//  キャラクター本体
+//  孫悟空の共通設定
 // =============================================================
-export const CHARACTERS = {
-  // ---------------- 孫悟空 ----------------
-  c001: {
+//  No.001 孫悟空 と No.002 GokuSS1 で、モデル・モーション・技は同じものを
+//  使います。差分（変身後のモデルやオーラの色）だけを各キャラで上書きします。
+// =============================================================
+const GOKU_BASE = {
     name: "孫悟空",
     model: `${R2}/goku1_idle.glb`,
     fps: 30,
@@ -160,16 +161,37 @@ export const CHARACTERS = {
       videoOffsetX: 0,
       videoOffsetY: 0,
     },
+};
 
-    // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
-    // 界王拳が続くあいだはずっと出したままにします。
-    // startFrame は「変身モーション開始から何フレーム目で出すか」。
-    // 気が爆発するのは素材の3.0秒。2秒に詰めた再生では約1.09秒＝33フレーム目です。
-    aura: {
-      normal:      { enabled: false },
-      transformed: { enabled: true, ...AURA_PRESETS.red, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 33, thunder: true },
-      reverted:    { enabled: false },
-    },
+// 変身オーラの共通設定。色だけ差し替えて使います。
+// startFrame は「変身モーション開始から何フレーム目で出すか」。
+// 気が爆発するのは素材の3.0秒。2秒に詰めた再生では約1.09秒＝33フレーム目です。
+const GOKU_AURA = (preset) => ({
+  normal:      { enabled: false },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 33, thunder: true },
+  reverted:    { enabled: false },
+});
+
+// =============================================================
+//  キャラクター本体
+// =============================================================
+export const CHARACTERS = {
+  // ---------------- No.001 孫悟空（界王拳・赤） ----------------
+  // 通常時はオーラなし。界王拳になったら赤いオーラを出し、続くあいだ出したままにします。
+  c001: {
+    ...GOKU_BASE,
+    aura: GOKU_AURA(AURA_PRESETS.red),
+  },
+
+  // ---------------- No.002 GokuSS1（スーパーサイヤ人・黄） ----------------
+  // モデル・モーション・技はNo.001と同じ。違いは次の2点です。
+  //   ・変身するとモデルがスーパーサイヤ人（goku_ssj.glb）に入れ替わる
+  //   ・オーラが黄色
+  c009: {
+    ...GOKU_BASE,
+    name: "GokuSS1",
+    transformedModel: `${R2}/goku_ssj.glb`,
+    aura: GOKU_AURA(AURA_PRESETS.yellow),
   },
 
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------
@@ -263,10 +285,11 @@ export function getPreloadUrls() {
     const c = getCharacter(id);
     if (!c.model) continue;
     urls.push(c.model);
+    if (c.transformedModel) urls.push(c.transformedModel);
     const idle = (c.motions || {}).idle;
     if (idle && idle.file) urls.push(idle.file);
   }
-  return urls;
+  return [...new Set(urls)]; // 同じファイルを重複して読まない
 }
 
 /** そのモーションの再生時間（秒）。設定が無ければ 0 を返します。 */
