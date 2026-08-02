@@ -940,6 +940,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const usesKaioken = Boolean(playerCard.isGoku) && !playerCard.isGokuSS1;
   const startsWithKaioken = supportCard?.effect === "transform_start" && usesKaioken;
   const startsWithSSJ = supportCard?.effect === "transform_start" && playerCard.isGotenks;
+  // GokuSS1 も「怒り」でスーパーサイヤ人スタートにします
+  const startsWithSS1 = supportCard?.effect === "transform_start" && playerCard.isGokuSS1;
   const startsWithBoost = supportCard?.effect === "boost_stats";
   const boostedHp = startsWithBoost ? playerCard.hp + (supportCard.hpBoost || 0) : playerCard.hp;
   const boostedAtk = startsWithBoost ? playerCard.atk + (supportCard.atkBoost || 0) : playerCard.atk;
@@ -1051,6 +1053,35 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [zoomPlayerHp, setZoomPlayerHp] = useState(playerCard.hp);
   const [zoomPlayerAtk, setZoomPlayerAtk] = useState(playerCard.atk);
   const [zoomPlayerStatus, setZoomPlayerStatus] = useState("");
+  // 変身モーションを見せるあいだは、アップ表示の暗幕を外して画面を明るくします
+  const [zoomBright, setZoomBright] = useState(false);
+  const [transformFlash, setTransformFlash] = useState(false);
+  // 被弾モーションを再生し始めた時刻（変身解除のタイミング合わせに使います）
+  const playerHitStartRef = useRef(0);
+
+  // 数値を少しずつ変化させます（HPが減っていく演出と同じ見せ方）
+  const numAnimRef = useRef({});
+  const animateValue = useCallback((key, from, to, ms, setter) => {
+    if (numAnimRef.current[key]) cancelAnimationFrame(numAnimRef.current[key]);
+    if (from === to) { setter(to); return; }
+    const t0 = performance.now();
+    const tick = (now) => {
+      const p = Math.min(1, (now - t0) / ms);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setter(Math.round(from + (to - from) * eased));
+      if (p < 1) numAnimRef.current[key] = requestAnimationFrame(tick);
+      else { setter(to); numAnimRef.current[key] = null; }
+    };
+    numAnimRef.current[key] = requestAnimationFrame(tick);
+  }, []);
+  useEffect(() => () => { Object.values(numAnimRef.current).forEach(id => id && cancelAnimationFrame(id)); }, []);
+
+  // 変身モーションに合わせて画面を明るくします
+  const flashForTransform = useCallback((ms) => {
+    setZoomBright(true); setTransformFlash(true);
+    setTimeout(() => setTransformFlash(false), 700);
+    setTimeout(() => setZoomBright(false), ms);
+  }, []);
 
   useEffect(() => {
     const startRound1Sequence = () => {
@@ -1073,16 +1104,43 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       T(() => { setShowSupportInfo(false); }, 6500);
       T(() => {
         if (startsWithKaioken) {
-          const kaiokenAtk = Math.floor(playerCard.atk * 1.5); setZoomPlayerAtk(kaiokenAtk); setPlayerCurrentAtk(kaiokenAtk);
+          const kaiokenAtk = Math.floor(playerCard.atk * 1.5); setPlayerCurrentAtk(kaiokenAtk);
           // カード説明を見せ終えたこのタイミングで変身モーションを再生します
           setZoomPlayerAnim(MOTION.TRANSFORM); setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
           // 変身が終わったら必ず待機モーションへ戻します
           const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+          // 暗いままだと変身が見えないので、この間だけ画面を明るくします
+          flashForTransform(ms + 300);
+          animateValue("zoomAtk", playerCard.atk, kaiokenAtk, 900, setZoomPlayerAtk);
           T(() => { setZoomPlayerAnim("idle"); setPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300);
         }
-        else if (startsWithSSJ) { const ssjAtk = Math.floor(playerCard.atk * 1.5); const ssjHp = Math.floor(playerCard.hp * 1.5); setPlayerHp(ssjHp); playerHpRef.current = ssjHp; setPlayerMaxHp(ssjHp); setPlayerDisplayHp(ssjHp); setPlayerCurrentAtk(ssjAtk); setZoomPlayerAtk(ssjAtk); setZoomPlayerHp(ssjHp); gotenksLevelRef.current = 1; setGotenksLevel(1); setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300); }
-        else if (startsWithBoost) { setPlayerHp(boostedHp); playerHpRef.current = boostedHp; setPlayerMaxHp(boostedHp); setPlayerCurrentAtk(boostedAtk); setZoomPlayerHp(boostedHp); setZoomPlayerAtk(boostedAtk); setTimeout(() => setZoomPlayerStatus(`HP+${supportCard.hpBoost} / ATK+${supportCard.atkBoost}`), 300); }
+        else if (startsWithSS1) {
+          // GokuSS1 は最初からスーパーサイヤ人でスタートします
+          const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+          setZoomPlayerAnim(MOTION.TRANSFORM);
+          flashForTransform(ms + 300);
+          applySS1Transform();
+          T(() => { setZoomPlayerAnim("idle"); }, ms + 50);
+          setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300);
+        }
+        else if (startsWithSSJ) {
+          const ssjAtk = Math.floor(playerCard.atk * 1.5); const ssjHp = Math.floor(playerCard.hp * 1.5);
+          setPlayerHp(ssjHp); playerHpRef.current = ssjHp; setPlayerMaxHp(ssjHp); setPlayerCurrentAtk(ssjAtk);
+          gotenksLevelRef.current = 1; setGotenksLevel(1);
+          animateValue("dispHp", playerCard.hp, ssjHp, 900, setPlayerDisplayHp);
+          animateValue("zoomHp", playerCard.hp, ssjHp, 900, setZoomPlayerHp);
+          animateValue("zoomAtk", playerCard.atk, ssjAtk, 900, setZoomPlayerAtk);
+          setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300);
+        }
+        else if (startsWithBoost) {
+          setPlayerHp(boostedHp); playerHpRef.current = boostedHp; setPlayerMaxHp(boostedHp); setPlayerCurrentAtk(boostedAtk);
+          // HPバーとアップ表示の数値を、少しずつ増やして見せます
+          animateValue("dispHp", playerCard.hp, boostedHp, 900, setPlayerDisplayHp);
+          animateValue("zoomHp", playerCard.hp, boostedHp, 900, setZoomPlayerHp);
+          animateValue("zoomAtk", playerCard.atk, boostedAtk, 900, setZoomPlayerAtk);
+          setTimeout(() => setZoomPlayerStatus(`HP+${supportCard.hpBoost} / ATK+${supportCard.atkBoost}`), 300);
+        }
       }, 6800);
       T(() => { setZoomTarget(null); setShowZoomStats(false); }, 8000);
       T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500);
@@ -1154,9 +1212,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         setBattleLog(l => [...l, `界王拳！！ ATK×1.5！`]);
         setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, true); }, 1200);
       } else if (ss1Win && attacker === "player") {
-        // GokuSS1: じゃんけんに勝ったので、攻撃の前に変身を見せる
-        const tms = applySS1Transform() || 2000;
-        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, tms + 300);
+        // GokuSS1: じゃんけんに勝ったので、攻撃の前に変身を見せる。
+        // ルーレットの暗い画面が閉じきってから変身モーションを始めます。
+        const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+        setTimeout(() => { applySS1Transform(); }, 400);
+        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 400 + tms + 300);
       } else { setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 100); }
     }, 1000);
     return () => clearTimeout(t);
@@ -1258,12 +1318,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const ratio = playerHpRef.current / baseMax;
     const newMax = Math.floor(baseMax * SS1_HP_MUL);
     const newHp = Math.min(newMax, Math.max(1, Math.floor(newMax * ratio)));
+    const prevHp = playerHpRef.current;
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
-    setPlayerHp(newHp); playerHpRef.current = newHp; setPlayerDisplayHp(newHp);
+    setPlayerHp(newHp); playerHpRef.current = newHp;
     const newAtk = Math.floor(baseAtk * SS1_ATK_MUL);
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
+    // 数値は一瞬で切り替えず、少しずつ増やして見せます
+    animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
+    animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
+    animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
     return tms;
-  }, [isSS1Char, playerCard]);
+  }, [isSS1Char, playerCard, animateValue]);
 
   // GokuSS1: 攻撃を受けたら元に戻す
   const revertSS1 = useCallback(() => {
@@ -1275,10 +1340,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const newMax = ss1BaseMaxHpRef.current != null ? ss1BaseMaxHpRef.current : playerCard.hp;
     const newAtk = ss1BaseAtkRef.current != null ? ss1BaseAtkRef.current : playerCard.atk;
     const newHp = Math.min(newMax, Math.max(1, Math.floor(newMax * ratio)));
+    const prevHp = playerHpRef.current;
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
-    setPlayerHp(newHp); playerHpRef.current = newHp; setPlayerDisplayHp(newHp);
+    setPlayerHp(newHp); playerHpRef.current = newHp;
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
-  }, [isSS1Char, playerCard]);
+    animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
+  }, [isSS1Char, playerCard, animateValue]);
 
   const handleDragonBurstResult = useCallback((result, hand, eHand) => {
     const currentMultiplier = dragonBurstMultiplierRef.current;
@@ -1303,8 +1370,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           setTimeout(() => {
             setDragonBurstDecide(null);
             if (isGotenks && forcedAttacker === "player") applyGotenksTransform();
-            if (isSS1Char && forcedAttacker === "player") applySS1Transform();
-            startAttackRoulette(forcedAttacker, move, baseAtk, forcedHand, forcedEHand, kaiokenActiveRef.current, false);
+            // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
+            const dbSS1Win = isSS1Char && forcedAttacker === "player" && !ss1ActiveRef.current;
+            startAttackRoulette(forcedAttacker, move, baseAtk, forcedHand, forcedEHand, kaiokenActiveRef.current, false, dbSS1Win);
           }, 2000);
         }, 2200);
       } else { setTimeout(() => startDragonBurst(newMult), 500); }
@@ -1315,12 +1383,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const move = MOVES[moveId];
     const baseAtk = attacker === "player" ? Math.floor(playerEffAtk * currentMultiplier) : Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * currentMultiplier);
     if (isGotenks && attacker === "player") applyGotenksTransform();
-    if (isSS1Char && attacker === "player") applySS1Transform();
+    // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
+    const dbSS1Win = isSS1Char && attacker === "player" && !ss1ActiveRef.current;
     setBattleLog(l => [...l, `ドラゴンバースト！ ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！`]);
     setClashSparks(false); setDragonBurstPhase(null); setPlayerClashOffset(0); setEnemyClashOffset(0);
     setJankenResultLabel(null); setJankenResult(null); setPhase("attack"); setTimerActive(false);
     dragonBurstMultiplierRef.current = 1; setDragonBurstMultiplier(1);
-    setTimeout(() => { startAttackRoulette(attacker, move, baseAtk, hand, eHand, kaiokenActiveRef.current, false); }, 400);
+    setTimeout(() => { startAttackRoulette(attacker, move, baseAtk, hand, eHand, kaiokenActiveRef.current, false, dbSS1Win); }, 400);
   }, [playerCard, enemyData, atkBonus, startDragonBurst, startAttackRoulette, playerCurrentAtk, isGotenks]);
 
   const handleDragonBurstResultRef = useRef(null);
@@ -1443,10 +1512,23 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
               setPlayerHp(newHpG); playerHpRef.current = newHpG; setPlayerMaxHp(newMax); setPlayerDisplayHp(newHpG);
               setPlayerCurrentAtk(getGotenksAtk(newLv)); gotenksLevelRef.current = newLv; setGotenksLevel(newLv);
             }
+            // 被弾モーション(5.0秒)は 1.9〜3.7秒が地面に倒れている時間で、
+            // 4.2秒から起き上がり、4.9秒で立ち終わります（腰の高さで実測）。
+            // 変身解除は「倒れきっている」3.2秒に行い、そのまま通常状態で
+            // 起き上がらせます。ターン送りは立ち終わるまで待ちます。
+            const HIT_DOWN_MS = 3200, HIT_STAND_MS = 5000;
+            const hitElapsed = (hitTarget === "player" && playerHitStartRef.current)
+              ? performance.now() - playerHitStartRef.current : null;
             // GokuSS1: 攻撃を受けたら通常状態へ戻る
-            if (isSS1Char && attacker === "enemy" && ss1ActiveRef.current) revertSS1();
+            if (isSS1Char && attacker === "enemy" && ss1ActiveRef.current) {
+              const d = hitElapsed == null ? 0 : Math.max(0, HIT_DOWN_MS - hitElapsed);
+              if (d > 0) setTimeout(() => revertSS1(), d); else revertSS1();
+            }
             if (needsDash) { setPlayerAnim("idle"); setEnemyAnim("idle"); setPlayerOffset(0); }
-            setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1, hitTarget === "player");
+            setDamageNum(null); setCurrentMove(null);
+            const turnWait = hitElapsed == null ? 0 : Math.max(0, HIT_STAND_MS - hitElapsed);
+            const goNext = () => nextTurn(isKaioken, turn + 1, hitTarget === "player");
+            if (turnWait > 0) setTimeout(goNext, turnWait); else goNext();
           }
         });
       }, 2000);
@@ -1465,7 +1547,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
     const landHit = () => {
       if (attacker === "player") setEnemyAnim("hit");
-      else { setEnemyAnim("idle"); setPlayerAnim("hit"); }
+      else { setEnemyAnim("idle"); setPlayerAnim("hit"); playerHitStartRef.current = performance.now(); }
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
@@ -1518,10 +1600,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       kaiokenActiveRef.current = true; setKaiokenActive(true);
       setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
       const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
-      // 攻撃を受けて倒れた場合は、起き上がりきってから変身させます。
-      // 被弾モーション(5秒)のうち完全に立つのは4.75秒あたりで、
-      // ここに来るのは被弾モーション開始から約3.5秒後なので、その差を待ちます。
-      const waitMs = playerWasHit ? 1400 : 0;
+      // 被弾で倒れた場合は呼び出し側が起き上がり切るまで待っているので、
+      // ここではもう待つ必要がありません。
+      const waitMs = 0;
       setTimeout(() => { setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true); }, waitMs);
       // 変身が終わったら必ず待機モーションへ戻します
       setTimeout(() => setPlayerAnim("idle"), waitMs + tms + 50);
@@ -1568,22 +1649,30 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         </div>
       </div>
 
-      {zoomTarget && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 78, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: "rgba(0,0,0,0.45)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <div style={{ transform: "scale(2.2)", transformOrigin: "center bottom", animation: "scouterZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+      {zoomTarget && (() => {
+        const accent = zoomTarget === "player" ? (playerCard.color || "#f59e0b") : (enemyData.color || "#ef4444");
+        return (
+        <div style={{ position: "fixed", inset: 0, zIndex: 78, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: zoomBright ? "rgba(0,0,0,0.02)" : "rgba(0,0,0,0.45)", transition: "background 0.3s ease" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 34 }}>
+            <div style={{ transform: "scale(2.75)", transformOrigin: "center bottom", animation: "scouterZoomIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both" }}>
               {zoomTarget === "player" ? <CharacterFighter card={playerCard} animState={zoomPlayerAnim} transformed={transformShown} size={110} scale={0.85} /> : <CharacterFighter card={enemyData} animState="idle" isEnemy size={110} />}
             </div>
             {showZoomStats && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "scouterStatIn 0.4s ease both", marginLeft: 16 }}>
-                <div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 13, color: "#fff", textShadow: `0 0 12px ${zoomTarget === "player" ? (playerCard.color || "#f59e0b") : (enemyData.color || "#ef4444")}`, letterSpacing: 2, marginBottom: 4, borderLeft: `3px solid ${zoomTarget === "player" ? (playerCard.color || "#f59e0b") : (enemyData.color || "#ef4444")}`, paddingLeft: 8 }}>{zoomTarget === "player" ? playerCard.name : enemyData.name}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 9, color: "#4ade8088", letterSpacing: 2 }}>HP</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 22, color: "#4ade80", textShadow: "0 0 12px #4ade80", letterSpacing: 1 }}>{zoomTarget === "player" ? zoomPlayerHp : enemyData.hp}</div></div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 9, color: "#f8717188", letterSpacing: 2 }}>ATK</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 22, color: "#f87171", textShadow: "0 0 12px #ef4444", letterSpacing: 1 }}>{zoomTarget === "player" ? zoomPlayerAtk : enemyData.atk}</div></div>
-                {zoomTarget === "player" && zoomPlayerStatus && (<div style={{ fontFamily: "monospace", fontWeight: "900", fontSize: 11, color: "#ff4400", background: "rgba(255,68,0,0.15)", border: "1px solid rgba(255,68,0,0.5)", borderRadius: 4, padding: "3px 8px", textShadow: "0 0 8px #ff4400", animation: "pulse 0.6s infinite" }}>{zoomPlayerStatus}</div>)}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: "scouterStatIn 0.4s ease both", marginLeft: 34, background: "rgba(0,0,0,0.55)", border: `1px solid ${accent}66`, borderRadius: 8, padding: "12px 16px", backdropFilter: "blur(2px)" }}>
+                <div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 19, color: "#fff", textShadow: `0 0 12px ${accent}`, letterSpacing: 2, marginBottom: 2, borderLeft: `4px solid ${accent}`, paddingLeft: 10 }}>{zoomTarget === "player" ? playerCard.name : enemyData.name}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#4ade80cc", letterSpacing: 3, fontWeight: "700" }}>HP</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#4ade80", textShadow: "0 0 14px #4ade80", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerHp : enemyData.hp}</div></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#f87171cc", letterSpacing: 3, fontWeight: "700" }}>ATK</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#f87171", textShadow: "0 0 14px #ef4444", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerAtk : enemyData.atk}</div></div>
+                {zoomTarget === "player" && zoomPlayerStatus && (<div style={{ fontFamily: "monospace", fontWeight: "900", fontSize: 15, color: "#ff4400", background: "rgba(255,68,0,0.15)", border: "1px solid rgba(255,68,0,0.5)", borderRadius: 4, padding: "5px 10px", textShadow: "0 0 8px #ff4400", animation: "pulse 0.6s infinite", textAlign: "center" }}>{zoomPlayerStatus}</div>)}
               </div>
             )}
           </div>
         </div>
+        );
+      })()}
+
+      {/* 変身の瞬間だけ画面を明るくします */}
+      {transformFlash && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 79, pointerEvents: "none", background: "radial-gradient(ellipse at center, rgba(255,255,255,0.85) 0%, rgba(255,220,120,0.35) 45%, rgba(255,180,0,0) 75%)", animation: "transformFlashAnim 0.7s ease-out forwards" }} />
       )}
 
       {showSupportBanner && supportCard && (
@@ -1942,7 +2031,8 @@ export default function App() {
         @keyframes fusionCharLeft { 0%{transform:translateX(0) scale(1)} 70%{transform:translateX(40px) scale(1.2)} 90%{transform:translateX(30px) scale(0.8)} 100%{transform:translateX(0) scale(0);opacity:0} }
         @keyframes fusionCharRight { 0%{transform:translateX(0) scale(1)} 70%{transform:translateX(-40px) scale(1.2)} 90%{transform:translateX(-30px) scale(0.8)} 100%{transform:translateX(0) scale(0);opacity:0} }
         @keyframes charLand { 0%{transform:scaleY(0.6) scaleX(1.3);opacity:0.5} 40%{transform:scaleY(1.1) scaleX(0.95)} 70%{transform:scaleY(0.97) scaleX(1.02)} 100%{transform:scale(1);opacity:1} }
-        @keyframes scouterZoomIn { 0%{opacity:0;transform:scale(1.4)} 60%{opacity:1;transform:scale(2.1)} 100%{opacity:1;transform:scale(2.2)} }
+        @keyframes scouterZoomIn { 0%{opacity:0;transform:scale(1.7)} 60%{opacity:1;transform:scale(2.62)} 100%{opacity:1;transform:scale(2.75)} }
+        @keyframes transformFlashAnim { 0%{opacity:0} 15%{opacity:1} 100%{opacity:0} }
         @keyframes scouterStatIn { 0%{opacity:0;transform:translateX(14px)} 100%{opacity:1;transform:translateX(0)} }
         @keyframes supportBannerSlide { 0%{opacity:0;transform:translateX(-60%) skewX(-8deg)} 60%{opacity:1;transform:translateX(4%) skewX(-8deg)} 100%{opacity:1;transform:translateX(0%) skewX(-8deg)} }
         @keyframes stickman-idle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }

@@ -401,10 +401,15 @@ function spawnVideoShot(S, shot, spec, place) {
 
   S.scene.add(mesh);
 
-  // 最初から再生
-  try { video.currentTime = 0; } catch (e) { /* 読み込み前は無視 */ }
+  // 動画の頭には真っ黒なコマが数フレーム入っているので、その分を飛ばして
+  // 再生します（videoStartAt）。こうすると「腕を伸ばした瞬間」に
+  // ビームが見えるようになります。
+  const startAt = spec.videoStartAt || 0;
+  try { video.currentTime = startAt; } catch (e) { /* 読み込み前は無視 */ }
   const p = video.play();
   if (p && p.catch) p.catch(() => { /* 自動再生できなくても進行は止めません */ });
+
+  const full = (isFinite(video.duration) && video.duration > 0) ? video.duration : (spec.videoDuration || 2.2);
 
   S.shots.push({
     isVideo: true,
@@ -414,7 +419,7 @@ function spawnVideoShot(S, shot, spec, place) {
     kind: shot.kind,
     life: 0,
     // 実際の動画の長さを優先します（読めない場合は設定値）
-    duration: (isFinite(video.duration) && video.duration > 0) ? video.duration : (spec.videoDuration || 2.2),
+    duration: Math.max(0.3, full - startAt),
     hit: false,
   });
 }

@@ -129,10 +129,11 @@ const GOKU_BASE = {
       // 入っているため、向きを素材に任せる指定です。
       kiBlast: { file: `${R2}/Goku_KiBlast.fbx`, loop: false, trimEnd: 2.0, duration: 1.5, faceCamera: true, shotAt: 1.5 },
 
-      // 素材8.3秒。0〜4.75秒が溜め、5.0秒で相手方向へ腕を伸ばしきって
-      // かめはめ波が出る。6.5秒までを3秒に詰めて全フレーム再生する。
-      // 発射は再生2.3秒、そこから1秒見せて着弾＝全体で約3.3秒。
-      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 6.5, duration: 3.0, faceCamera: true, shotAt: 5.0 },
+      // 素材8.3秒。0〜4.5秒が溜め、4.6秒から腕が前に出て5.0秒で伸びきる
+      // （実測: 手と腰の距離が 4.5秒で4.9→4.75秒で23.6→5.0秒で35.9）。
+      // 6.5秒までを3秒に詰めて全フレーム再生する。
+      // shotAt は「伸びきる直前」の4.7に置き、動画の立ち上がり分を先取りします。
+      ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 6.5, duration: 3.0, faceCamera: true, shotAt: 4.7 },
 
       // 素材8.3秒。3.0秒で気が爆発して立ち上がる（腰が0.73→0.78に上がる）。
       // 5.5秒までを2秒に詰めて全フレーム再生する。
@@ -152,12 +153,15 @@ const GOKU_BASE = {
     //   videoAspect  : 動画の縦横比（1920x1080 なので 16/9）
     //   videoDuration: 動画の長さ（秒）。実際の長さが読めればそちらを優先します
     //   videoOffsetX / videoOffsetY : 位置の微調整
+    //   videoStartAt : 動画の何秒目から再生するか。実測で0〜0.05秒は
+    //                  完全な黒コマなので、そこを飛ばして即ビームを出します
     ultimate: {
       model: "", color: "#7fd4ff", effect: "beam", scale: 1.0, speed: 9,
       video: "/kamehameha.mp4",
       videoAspect: 16 / 9,
       videoSpan: 1.15,
       videoDuration: 2.17,
+      videoStartAt: 0.1,
       videoOffsetX: 0,
       videoOffsetY: 0,
     },
