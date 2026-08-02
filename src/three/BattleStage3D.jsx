@@ -142,6 +142,12 @@ export default function BattleStage3D({
     Object.assign(S, { THREE, renderer, scene, camera, playerRig, enemyRig, shots: [] });
     applyLayout(S, w0, h0); // 立ち位置とカメラを画面比率に合わせる
 
+    // 必殺技の動画エフェクトは、撃つ前に読み込んでおきます
+    for (const id of [playerCardId, enemyCardId]) {
+      const u = (getCharacter(id).ultimate || {}).video;
+      if (u) preloadShotVideo(u);
+    }
+
     const clock = new THREE.Clock();
     const tick = () => {
       if (cancelled) return;
@@ -265,6 +271,85 @@ export default function BattleStage3D({
 }
 
 // =============================================================
+//  動画エフェクト（かめはめ波など）
+// =============================================================
+//  背景が黒い動画をそのまま加算合成で重ねます。
+//  加算合成では黒＝加算されないので、黒背景が自然に透けます。
+//  （アルファ付き動画でなくてもエフェクトとして使えます）
+// =============================================================
+const videoCache = new Map(); // url -> HTMLVideoElement
+
+/** 動画を用意します。使い回すので毎回ダウンロードしません */
+function getVideo(url) {
+  let v = videoCache.get(url);
+  if (!v) {
+    v = document.createElement("video");
+    v.src = url;
+    v.muted = true;          // 自動再生できるように必ず消音
+    v.defaultMuted = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    v.crossOrigin = "anonymous";
+    v.load();
+    videoCache.set(url, v);
+  }
+  return v;
+}
+
+/** 先読み（対戦開始時に呼びます） */
+export function preloadShotVideo(url) {
+  if (url) getVideo(url);
+}
+
+function spawnVideoShot(S, shot, spec, place) {
+  const THREE = S.THREE;
+  const video = getVideo(spec.video);
+
+  const tex = new THREE.VideoTexture(video);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+
+  const aspect = spec.videoAspect || 16 / 9;
+  const width = (spec.videoWidth || 4.2) * place.charScale;
+  const height = width / aspect;
+
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      blending: THREE.AdditiveBlending, // 黒が透ける
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+
+  // 撃つ人と相手のあいだに置き、相手側へ向けます
+  const midX = (place.startX + place.endX) / 2 + (spec.videoOffsetX || 0) * (place.fromPlayer ? 1 : -1);
+  mesh.position.set(midX, place.y + (spec.videoOffsetY || 0), 0.15);
+  if (!place.fromPlayer) mesh.scale.x = -1; // 敵が撃つときは左右反転
+
+  S.scene.add(mesh);
+
+  // 最初から再生
+  try { video.currentTime = 0; } catch (e) { /* 読み込み前は無視 */ }
+  const p = video.play();
+  if (p && p.catch) p.catch(() => { /* 自動再生できなくても進行は止めません */ });
+
+  S.shots.push({
+    isVideo: true,
+    group: mesh,
+    texture: tex,
+    from: shot.from,
+    kind: shot.kind,
+    life: 0,
+    duration: spec.videoDuration || 2.2,
+    hit: false,
+  });
+}
+
+// =============================================================
 //  弾（気弾 / 必殺技）
 // =============================================================
 function spawnShot(S, shot) {
@@ -287,6 +372,12 @@ function spawnShot(S, shot) {
   // 発射位置の高さはキャラの大きさに合わせます（胸のあたり）
   const charScale = (S.playerRig && S.playerRig.root.scale.x) || 1;
   const y = 0.8 * charScale;
+
+  // 動画エフェクトが指定されていればそちらを使います
+  if (spec.video) {
+    spawnVideoShot(S, shot, spec, { fromPlayer, startX, endX, y, charScale });
+    return;
+  }
 
   const group = new THREE.Group();
   let mesh;
@@ -353,6 +444,27 @@ function updateShots(S, dt, onShotHit) {
 
   for (const s of S.shots) {
     s.life += dt;
+
+    // --- 動画エフェクトは再生し終わるまで出しっぱなし ---
+    if (s.isVideo) {
+      if (!s.hit && s.life >= s.duration * 0.45) {
+        s.hit = true;
+        if (onShotHit) onShotHit({ from: s.from, kind: s.kind });
+      }
+      // 終わり際はふわっと消します
+      const left = s.duration - s.life;
+      if (left < 0.35) s.group.material.opacity = Math.max(0, left / 0.35);
+      if (s.life >= s.duration) {
+        S.scene.remove(s.group);
+        s.group.geometry.dispose();
+        s.group.material.dispose();
+        if (s.texture) s.texture.dispose();
+        continue;
+      }
+      remain.push(s);
+      continue;
+    }
+
     const dist = Math.abs(s.endX - s.startX);
     s.t += (dt * s.speed) / Math.max(dist, 0.001);
 

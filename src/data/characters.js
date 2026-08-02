@@ -144,7 +144,22 @@ export const CHARACTERS = {
     },
 
     kiBlast:  { model: "", color: "#ffd21a", effect: "sphere", scale: 0.30, speed: 6 },
-    ultimate: { model: "", color: "#7fd4ff", effect: "beam",   scale: 1.0,  speed: 9 },
+
+    // かめはめ波は動画エフェクトを使います（public/kamehameha.mp4）。
+    // 黒背景の動画を加算合成で重ねるので、黒い部分は自然に透けます。
+    //   videoWidth   : 表示する幅（キャラの大きさ倍率が掛かります）
+    //   videoAspect  : 動画の縦横比（1920x1080 なので 16/9）
+    //   videoDuration: 動画の長さ（秒）。これを過ぎたら消します
+    //   videoOffsetX / videoOffsetY : 位置の微調整
+    ultimate: {
+      model: "", color: "#7fd4ff", effect: "beam", scale: 1.0, speed: 9,
+      video: "/kamehameha.mp4",
+      videoAspect: 16 / 9,
+      videoWidth: 4.2,
+      videoDuration: 2.2,
+      videoOffsetX: 0,
+      videoOffsetY: 0,
+    },
 
     // 通常時はオーラなし。界王拳（変身）になったら赤いオーラを出し、
     // 界王拳が続くあいだはずっと出したままにします。
