@@ -124,7 +124,11 @@ export default class CharacterRig {
       const rot = (rotDeg * Math.PI) / 180;
       this._baseYaw = this.isEnemy ? Math.PI + rot : rot;
     }
-    this.model.rotation.y = this._baseYaw;
+    // 向きは modelGroup（素体の親）に掛けます。
+    // 素体GLB自体は X軸-90度が焼き込まれた「Z-upのモデル」なので、
+    // 素体に直接 rotation.y を掛けると、垂直軸ではなく傾いた軸で回って
+    // キャラが横倒しになります。親を回せば必ず垂直軸で回せます。
+    this.modelGroup.rotation.y = this._baseYaw;
     this._targetYaw = this._baseYaw;
 
     // オーラを体に追従させるための骨（倒れたらオーラも一緒に倒れます）
@@ -493,13 +497,13 @@ export default class CharacterRig {
     // --- 向きをなめらかに変える ---
     // 必殺技や気弾は素体の向きが変わるので、切り替え時に一瞬で
     // 回らないよう少しずつ回します（その場でくるっと向き直る感じ）
-    if (this.model && this._targetYaw != null) {
-      const cur = this.model.rotation.y;
+    if (this._targetYaw != null) {
+      const cur = this.modelGroup.rotation.y;
       let diff = this._targetYaw - cur;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      if (Math.abs(diff) < 0.002) this.model.rotation.y = this._targetYaw;
-      else this.model.rotation.y = cur + diff * Math.min(1, dt * 12);
+      if (Math.abs(diff) < 0.002) this.modelGroup.rotation.y = this._targetYaw;
+      else this.modelGroup.rotation.y = cur + diff * Math.min(1, dt * 12);
     }
 
     // --- 変身オーラの開始判定 ---

@@ -1362,7 +1362,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
                   setPlayerHp(reviveHp); playerHpRef.current = reviveHp; setPlayerDisplayHp(reviveHp);
                   setBattleLog(l => [...l, `ナメック星人の力発動！ HP ${reviveHp} 回復！`]);
                   setPlayerAnim("idle"); setEnemyAnim("idle");
-                  setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1);
+                  setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1, hitTarget === "player");
                 });
               } else { setEnemyAnim("win"); setPlayerAnim("lose"); setTimeout(() => onEnd(false), 1500); setPhase("result"); }
             }
@@ -1376,7 +1376,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
               setPlayerCurrentAtk(getGotenksAtk(newLv)); gotenksLevelRef.current = newLv; setGotenksLevel(newLv);
             }
             if (needsDash) { setPlayerAnim("idle"); setEnemyAnim("idle"); setPlayerOffset(0); }
-            setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1);
+            setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1, hitTarget === "player");
           }
         });
       }, 2000);
@@ -1436,7 +1436,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const nextTurn = useCallback((isKaioken, nextTurnNum) => {
+  const nextTurn = useCallback((isKaioken, nextTurnNum, playerWasHit = false) => {
     setPlayerAnim("idle"); setEnemyAnim("idle");
     setPlayerHand(null); setEnemyHand(null); setJankenResult(null); setTurn(nextTurnNum);
 
@@ -1446,12 +1446,16 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (playerCard.isGoku && !kaiokenActiveRef.current && playerHpRef.current <= boostedHp / 2) {
       kaiokenUnlockedRef.current = true; setKaiokenUnlocked(true);
       kaiokenActiveRef.current = true; setKaiokenActive(true);
-      setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
       setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
       const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+      // 攻撃を受けて倒れた場合は、起き上がりきってから変身させます。
+      // 被弾モーション(5秒)のうち完全に立つのは4.75秒あたりで、
+      // ここに来るのは被弾モーション開始から約3.5秒後なので、その差を待ちます。
+      const waitMs = playerWasHit ? 1400 : 0;
+      setTimeout(() => { setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true); }, waitMs);
       // 変身が終わったら必ず待機モーションへ戻します
-      setTimeout(() => setPlayerAnim("idle"), tms + 50);
-      kaiokenDelay = tms + 400; // 変身モーション＋余韻
+      setTimeout(() => setPlayerAnim("idle"), waitMs + tms + 50);
+      kaiokenDelay = waitMs + tms + 400; // 起き上がり＋変身モーション＋余韻
     }
 
     const startRound = () => {
