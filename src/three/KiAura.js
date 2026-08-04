@@ -111,10 +111,11 @@ export function createKiAura(THREE, opts = {}) {
   const opacity = opts.opacity != null ? opts.opacity : 0.95;
   // 素材は絵の周りに余白があり、実際に光って見えるのはタイルの約81%です。
   // 足元まで確実に包めるよう、その分を見込んで大きめ＆やや下寄りにします。
-  //   板の範囲   … y −0.45 〜 2.05
-  //   見える範囲 … y −0.23 〜 1.83（足元が地面より下から立ち上がる）
-  const height = opts.height || 2.5;
-  const centerY = opts.centerY != null ? opts.centerY : 0.80;
+  //   板の範囲   … y −0.66 〜 2.14
+  //   見える範囲 … y −0.39 〜 1.87
+  // （キャラは足 0.05 〜 頭 1.61 なので、足先まで確実に包まれます）
+  const height = opts.height || 2.8;
+  const centerY = opts.centerY != null ? opts.centerY : 0.74;
   // anchorY: このグループ原点が体のどの高さに置かれるか（腰の高さ）。
   // 体に追従させるため、板は原点からの相対位置で置きます。
   const anchorY = opts.anchorY != null ? opts.anchorY : 0;
@@ -131,19 +132,23 @@ export function createKiAura(THREE, opts = {}) {
     layers.push({ material: mat, sheet, time: Math.random() * 2 });
   };
 
+  // ここから下の「手前に置く層」は加算合成なので、強くしすぎるとキャラの色が
+  // 飽和して姿が見えなくなります。実測（道着の色 217,99,26 で計測）:
+  //   霞0.30 + 稲妻0.85 → キャラ部分が (255,156,63)＝赤が振り切れて白飛び
+  //   霞0.13 + 稲妻0.28 → キャラ部分が (244,123,42)＝光は乗るが姿は見える
   // 背面：オーラ本体（キャラの後ろに置くのでキャラが手前に立って見えます）
   addLayer(AURA_SHEET, width, height, -0.30,
-    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 1.0 }));
+    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 0.85 }));
 
   // 前面：薄い霞（キャラの上に光が乗り、包まれて見えます）
   addLayer(AURA_SHEET, width, height, 0.32,
-    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 0.30 }));
+    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 0.13 }));
 
   // 稲妻（任意）
   if (opts.thunder) {
     const th = height * 0.92;
     addLayer(THUNDER_SHEET, th * THUNDER_SHEET.aspect, th, 0.36,
-      makeMaterial(THREE, THUNDER_SHEET, { color: boltColor, opacity, intensity: 0.85 }));
+      makeMaterial(THREE, THUNDER_SHEET, { color: boltColor, opacity, intensity: 0.28 }));
   }
 
   group.userData.tick = (dt) => {

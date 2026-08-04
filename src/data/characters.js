@@ -172,7 +172,7 @@ const GOKU_BASE = {
 // 気が爆発するのは素材の3.0秒。2秒に詰めた再生では約1.09秒＝33フレーム目です。
 const GOKU_AURA = (preset) => ({
   normal:      { enabled: false },
-  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.95, yOffset: 0, startFrame: 33, thunder: true },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 33, thunder: true },
   reverted:    { enabled: false },
 });
 
