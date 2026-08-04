@@ -30,6 +30,10 @@ const R2 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev";
 export const AURA_PRESETS = {
   white:  { color: "#e8f2ff", boltColor: "#bfe9ff" },
   yellow: { color: "#ffcc11", boltColor: "#7fdfff" },
+  // スーパーサイヤ人用。髪の色を実測すると (249,207,88) で、
+  // yellow(255,204,17) とは赤・緑がほぼ同じため髪がオーラに埋もれます。
+  // 緑を落とした橙寄りの金色にして、金髪が浮き上がるようにしています。
+  gold:   { color: "#ff8c00", boltColor: "#7fdfff" },
   red:    { color: "#ff2010", boltColor: "#ffd8a0" },
   blue:   { color: "#1058ff", boltColor: "#a8ecff" },
   purple: { color: "#9e1aff", boltColor: "#e6b4ff" },
@@ -195,7 +199,7 @@ export const CHARACTERS = {
     ...GOKU_BASE,
     name: "GokuSS1",
     transformedModel: `${R2}/goku_ssj.glb`,
-    aura: GOKU_AURA(AURA_PRESETS.yellow),
+    aura: GOKU_AURA(AURA_PRESETS.gold),
   },
 
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------

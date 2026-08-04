@@ -145,13 +145,17 @@ const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009"];
 const SUPPORT_CARDS = [
   { id: "s001", name: "怒り", rarity: "SR", color: "#ef4444", glow: "#dc2626", description: "1段階変身した状態でバトル開始。孫悟空は界王拳状態からスタート。", timing: "battle_start", effect: "transform_start", illustSymbol: "🔥" },
   { id: "s002", name: "潜在能力の解放", rarity: "SR", color: "#a78bfa", glow: "#7c3aed", description: "HPが300、ATKが100上昇する。（永続）", timing: "battle_start", effect: "boost_stats", hpBoost: 300, atkBoost: 100, illustSymbol: "⚡" },
+  // ここから下は、バトル開始時ではなく条件を満たしたときに発動します
+  { id: "s003", name: "サイヤ人の力", rarity: "SR", color: "#fb923c", glow: "#ea580c", description: "じゃんけんに3回連続で負けた時、HPが1000回復しATKが2倍になる。（1回限り／攻撃すると元に戻る）", timing: "on_lose_streak", effect: "saiyan_power", loseStreak: 3, healAmount: 1000, atkMul: 2, illustSymbol: "💢" },
+  { id: "s004", name: "戦いのセンス", rarity: "SR", color: "#4ade80", glow: "#16a34a", description: "じゃんけんに2回連続で負けた時、じゃんけんの勝敗が逆転する。", timing: "on_lose_streak", effect: "reverse_result", loseStreak: 2, illustSymbol: "👁️" },
+  { id: "s005", name: "気のバリア", rarity: "SR", color: "#67e8f9", glow: "#0891b2", description: "800ダメージ以上の攻撃を無効化する。（1回限り）", timing: "on_damage", effect: "ki_barrier", threshold: 800, illustSymbol: "🛡️" },
 ];
 
 const EVENT_CARDS = [
   { id: "e001", name: "ナメック星人の力", rarity: "SSR", color: "#22d3ee", glow: "#0891b2", description: "5ターン以内に自分の体力が0になった時、体力を半分回復する。(1回限り)", timing: "on_ko", condition: "turn_lte_5", effect: "revive_half", illustSymbol: "💧" },
 ];
 
-const INITIAL_SUPPORT = ["s001", "s002"];
+const INITIAL_SUPPORT = ["s001", "s002", "s003", "s004", "s005"];
 const INITIAL_EVENT   = ["e001"];
 const HANDS = ["rock", "scissors", "paper"];
 const HAND_EMOJI = { rock: "✊", scissors: "✌️", paper: "🖐️" };
@@ -372,6 +376,12 @@ const HpBar = ({ displayHp, max, flip = false, playerLabel = "1P" }) => {
 const HAND_COLOR = { rock: "#ef4444", scissors: "#f59e0b", paper: "#3b82f6" };
 const HAND_LABEL = { rock: "グー", scissors: "チョキ", paper: "パー" };
 const HAND_BG = { rock: "#1a0505", scissors: "#1a1005", paper: "#030d1a" };
+
+// HPバーの下に並ぶ ATK / 状態の表示（見やすさ優先で大きめ）
+const BADGE = {
+  fontSize: 14, fontFamily: "monospace", fontWeight: "900",
+  borderRadius: 5, padding: "3px 9px", letterSpacing: 0.5, lineHeight: 1.2,
+};
 
 const JankenBtn = ({ hand, playerCard, onSelect, selected }) => {
   const locked = selected !== null;
@@ -1008,6 +1018,24 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   // 最新値をrefでも持っておく（setStateは即時反映されないため）
   const playerMaxHpRef = useRef(playerCard.hp);
   const playerAtkRef = useRef(playerCard.atk);
+
+  // ---- 条件で発動するサポートカード ----
+  const supEffect = supportCard?.effect;
+  const loseStreakRef = useRef(0);              // じゃんけんの連敗数
+  const [saiyanPowerActive, setSaiyanPowerActive] = useState(false);
+  const saiyanPowerActiveRef = useRef(false);
+  const saiyanUsedRef = useRef(false);
+  const [barrierReady, setBarrierReady] = useState(supEffect === "ki_barrier");
+  const barrierReadyRef = useRef(supEffect === "ki_barrier");
+  // 必殺技の溜め中だけカメラを自キャラへ寄せます
+  const [ultimateZoom, setUltimateZoom] = useState(false);
+  // カード発動を知らせる小さな表示
+  const [cardPopup, setCardPopup] = useState(null);
+  const popCard = useCallback((card, text) => {
+    if (!card) return;
+    setCardPopup({ key: Date.now(), card, text });
+    setTimeout(() => setCardPopup(null), 1900);
+  }, []);
   const [roundPhase, setRoundPhase] = useState("done");
   const [showRoundNum, setShowRoundNum] = useState(1);
   const [roundFadeOut, setRoundFadeOut] = useState(false);
@@ -1142,12 +1170,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           setTimeout(() => setZoomPlayerStatus(`HP+${supportCard.hpBoost} / ATK+${supportCard.atkBoost}`), 300);
         }
       }, 6800);
-      T(() => { setZoomTarget(null); setShowZoomStats(false); }, 8000);
-      T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500);
-      T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 9100);
-      T(() => { setShowZoomStats(true); }, 9600);
-      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 11100);
-      T(() => { startRound1Sequence(); }, 11400);
+      // ステータスが変わるカードのときは、上がった後の数値をしばらく見せます
+      const HOLD = (startsWithKaioken || startsWithSS1 || startsWithSSJ || startsWithBoost) ? 2000 : 0;
+      T(() => { setZoomTarget(null); setShowZoomStats(false); }, 8000 + HOLD);
+      T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500 + HOLD);
+      T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 9100 + HOLD);
+      T(() => { setShowZoomStats(true); }, 9600 + HOLD);
+      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 11100 + HOLD);
+      T(() => { startRound1Sequence(); }, 11400 + HOLD);
     } else {
       T(() => { setZoomTarget(null); setShowZoomStats(false); setEnemyVisible(true); setEnterPhase("enemy_land"); }, 3200);
       T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 3800);
@@ -1347,6 +1377,54 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
   }, [isSS1Char, playerCard, animateValue]);
 
+  // ---- サポート「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
+  const applySaiyanPower = useCallback(() => {
+    if (saiyanUsedRef.current) return;
+    saiyanUsedRef.current = true;
+    saiyanPowerActiveRef.current = true; setSaiyanPowerActive(true);
+    const heal = supportCard?.healAmount || 1000;
+    const from = playerHpRef.current;
+    const to = Math.min(playerMaxHpRef.current, from + heal);
+    setPlayerHp(to); playerHpRef.current = to;
+    animateValue("dispHp", from, to, 900, setPlayerDisplayHp);
+    const mul = supportCard?.atkMul || 2;
+    const na = Math.floor(playerAtkRef.current * mul);
+    setPlayerCurrentAtk(na); playerAtkRef.current = na;
+    setBattleLog(l => [...l, `サイヤ人の力！ HP${to - from}回復・ATK${mul}倍！`]);
+    popCard(supportCard, `HP+${to - from} / ATK×${mul}`);
+  }, [supportCard, animateValue, popCard]);
+
+  // 攻撃を1回行ったらATKを元に戻します
+  const revertSaiyanPower = useCallback(() => {
+    if (!saiyanPowerActiveRef.current) return;
+    saiyanPowerActiveRef.current = false; setSaiyanPowerActive(false);
+    const mul = supportCard?.atkMul || 2;
+    const back = Math.max(1, Math.floor(playerAtkRef.current / mul));
+    setPlayerCurrentAtk(back); playerAtkRef.current = back;
+    setBattleLog(l => [...l, `ATKが元に戻った。`]);
+  }, [supportCard]);
+
+  /**
+   * じゃんけんの結果を受けて、連敗で発動するサポートカードを処理します。
+   * 「戦いのセンス」で逆転した場合は逆転後の結果を返します。
+   */
+  const applyLoseStreak = useCallback((result) => {
+    if (result === "win") { loseStreakRef.current = 0; return result; }
+    if (result !== "lose") return result;   // あいこは連敗数を変えません
+    loseStreakRef.current += 1;
+    const need = supportCard?.loseStreak || 0;
+    if (need > 0 && loseStreakRef.current >= need) {
+      if (supEffect === "reverse_result") {
+        loseStreakRef.current = 0;
+        setBattleLog(l => [...l, `戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
+        popCard(supportCard, "勝敗 逆転！");
+        return "win";
+      }
+      if (supEffect === "saiyan_power") applySaiyanPower();
+    }
+    return result;
+  }, [supportCard, supEffect, applySaiyanPower, popCard]);
+
   const handleDragonBurstResult = useCallback((result, hand, eHand) => {
     const currentMultiplier = dragonBurstMultiplierRef.current;
     const basePlayerAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : playerCurrentAtk;
@@ -1401,7 +1479,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setTimeout(() => {
         const eHand = HANDS[Math.floor(Math.random() * 3)];
         setEnemyHand(eHand); setShowSet(false);
-        const result = judgeJanken(hand, eHand);
+        const result = applyLoseStreak(judgeJanken(hand, eHand));
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
         setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, 1500);
       }, 600);
@@ -1412,7 +1490,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     setTimeout(() => {
       const eHand = HANDS[Math.floor(Math.random() * 3)];
       setEnemyHand(eHand); setShowSet(false);
-      const result = judgeJanken(hand, eHand);
+      // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
+      const result = applyLoseStreak(judgeJanken(hand, eHand));
       setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
       if (result === "draw") {
         setBattleLog(l => [...l, `T${turn}: ドラゴンバースト！！`]);
@@ -1440,7 +1519,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win);
       }, 450);
     }, 600);
-  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus]);
+  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak]);
 
   const drainHp = useCallback((target, fromHp, toHp, onDone) => {
     const dmg = fromHp - toHp;
@@ -1456,6 +1535,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const p = pendingShotRef.current;
     if (!p) return;
     pendingShotRef.current = null;
+    setUltimateZoom(false);   // 弾が出たら必ず引きます（保険）
     setShot({ key: Date.now(), from: "player", kind: p.kind });
     setTimeout(p.onLand, p.travelMs);
   }, []);
@@ -1476,8 +1556,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const kaiokenSelfDmg = (isKaioken && attacker === "player") ? 200 : 0;
     const afterHit = (frozenAnim, hitTarget) => {
       const fromHp = hitTarget === "enemy" ? enemyHpRef.current : playerHpRef.current;
-      const newHp = Math.max(0, fromHp - dmg);
-      setDmgText({ amount: dmg, target: hitTarget });
+      // サポート「気のバリア」: 大きな一撃を1回だけ無効化します
+      let dealt = dmg;
+      let blocked = false;
+      if (hitTarget === "player" && barrierReadyRef.current && dmg >= (supportCard?.threshold || 800)) {
+        barrierReadyRef.current = false; setBarrierReady(false);
+        dealt = 0; blocked = true;
+        setBattleLog(l => [...l, `気のバリア！ ${dmg}ダメージを無効化した！`]);
+        popCard(supportCard, `${dmg} ダメージを無効化！`);
+      }
+      const newHp = Math.max(0, fromHp - dealt);
+      setDmgText({ amount: dealt, target: hitTarget, blocked });
+      // サポート「サイヤ人の力」: 一度攻撃したらATKは元に戻ります
+      if (attacker === "player") setTimeout(() => revertSaiyanPower(), 1200);
       setTimeout(() => {
         setDmgText(null);
         if (hitTarget === "enemy") { setEnemyHp(newHp); enemyHpRef.current = newHp; }
@@ -1555,7 +1646,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
     if (attacker === "player") {
       if (playerCard.isGoku) {
-        if (isUltimate) setPlayerAnim("beam");
+        if (isUltimate) {
+          setPlayerAnim("beam");
+          // 溜めのあいだキャラに寄り、エネルギー波が出る直前に引きます
+          setUltimateZoom(true);
+          const shotMs = Math.round(getMotionShotDelay(playerCard.id, MOTION.ULTIMATE) * 1000);
+          setTimeout(() => setUltimateZoom(false), Math.max(300, shotMs - 450));
+        }
         else if (useKiBlast) setPlayerAnim(MOTION.KI_BLAST);
         else if (move.id === "scissors_kick") setPlayerAnim("kick");
         else setPlayerAnim("punch");
@@ -1617,6 +1714,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     else showRoundAnnounce(nextTurnNum, startRound);
   }, [playerCard, startKiryoku, showRoundAnnounce]);
 
+  // HPバーの下に出す自分のATK（界王拳・サイヤ人の力の倍率を反映した見た目上の値）
+  const playerShownAtk = (() => {
+    let a = playerCurrentAtk + atkBonus.player;
+    if (kaiokenActive) a = Math.floor(a * 1.5);
+    return a;
+  })();
+
   return (
     <div style={{ minHeight: "100vh", background: BATTLE_BG ? `url(${BATTLE_BG}) center bottom / cover` : "linear-gradient(180deg,#0a1628,#1a2a4a)", fontFamily: "monospace", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
       {showEventCutIn && eventCard && (<CardCutIn card={eventCard} cardType="event" onDone={() => { setShowEventCutIn(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
@@ -1634,17 +1738,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           <HpBar displayHp={enemyDisplayHp} max={enemyData.hp} flip={true} playerLabel="2P" />
         </div>
         {phase === "choose" && (<div style={{ marginTop: 8, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}><div style={{ height: "100%", width: `${(timer / 15) * 100}%`, background: timer <= 5 ? "linear-gradient(90deg,#ef4444,#ff6b6b)" : "linear-gradient(90deg,#3b82f6,#60a5fa)", borderRadius: 2, transition: "width 1s linear" }} /></div>)}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, marginTop: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, marginTop: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 10, color: "#f87171", fontFamily: "monospace", fontWeight: "700", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "1px 5px" }}>ATK {kaiokenActive ? Math.floor((playerCurrentAtk + atkBonus.player) * 1.5) : (playerCurrentAtk + atkBonus.player)}</div>
-            {kaiokenActive && (<div style={{ fontSize: 10, color: "#ff4400", fontFamily: "monospace", fontWeight: "900", background: "rgba(255,68,0,0.15)", border: "1px solid rgba(255,68,0,0.5)", borderRadius: 4, padding: "1px 5px", animation: "pulse 0.6s infinite" }}>界王拳🔥</div>)}
-            {ss1Active && (<div style={{ fontSize: 10, color: "#fbbf24", fontFamily: "monospace", fontWeight: "900", background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.5)", borderRadius: 4, padding: "1px 5px", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
-            {isGotenks && gotenksLevel === 1 && (<div style={{ fontSize: 9, color: "#fbbf24", fontFamily: "monospace", fontWeight: "900", background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.5)", borderRadius: 4, padding: "1px 5px", animation: "pulse 0.8s infinite" }}>⚡SSJ</div>)}
-            {isGotenks && gotenksLevel === 2 && (<div style={{ fontSize: 9, color: "#a78bfa", fontFamily: "monospace", fontWeight: "900", background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.5)", borderRadius: 4, padding: "1px 5px", animation: "pulse 0.4s infinite" }}>⚡⚡SSJ3</div>)}
+            <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {playerShownAtk}</div>
+            {kaiokenActive && (<div style={{ ...BADGE, color: "#ff4400", background: "rgba(255,68,0,0.18)", border: "1px solid rgba(255,68,0,0.55)", animation: "pulse 0.6s infinite" }}>界王拳🔥</div>)}
+            {ss1Active && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
+            {saiyanPowerActive && (<div style={{ ...BADGE, color: "#fb923c", background: "rgba(251,146,60,0.18)", border: "1px solid rgba(251,146,60,0.55)", animation: "pulse 0.6s infinite" }}>ATK×2🔥</div>)}
+            {barrierReady && (<div style={{ ...BADGE, color: "#67e8f9", background: "rgba(103,232,249,0.14)", border: "1px solid rgba(103,232,249,0.5)" }}>気のバリア🛡️</div>)}
+            {isGotenks && gotenksLevel === 1 && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.8s infinite" }}>⚡SSJ</div>)}
+            {isGotenks && gotenksLevel === 2 && (<div style={{ ...BADGE, color: "#a78bfa", background: "rgba(167,139,250,0.18)", border: "1px solid rgba(167,139,250,0.55)", animation: "pulse 0.4s infinite" }}>⚡⚡SSJ3</div>)}
           </div>
           <div />
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <div style={{ fontSize: 10, color: "#f87171", fontFamily: "monospace", fontWeight: "700", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "1px 5px" }}>ATK {enemyData.atk + atkBonus.enemy}</div>
+            <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {enemyData.atk + atkBonus.enemy}</div>
           </div>
         </div>
       </div>
@@ -1669,6 +1775,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         </div>
         );
       })()}
+
+      {/* 条件で発動したサポートカードの通知 */}
+      {cardPopup && (
+        <div key={cardPopup.key} style={{ position: "fixed", top: "26%", left: 0, right: 0, zIndex: 84, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(0,0,0,0.82)", border: `2px solid ${cardPopup.card.color}`, boxShadow: `0 0 26px ${cardPopup.card.color}88`, borderRadius: 10, padding: "10px 18px", animation: "cutInCardIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+            <div style={{ fontSize: 34, filter: `drop-shadow(0 0 10px ${cardPopup.card.color})` }}>{cardPopup.card.illustSymbol}</div>
+            <div>
+              <div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 18, color: cardPopup.card.color, letterSpacing: 1, textShadow: `0 0 10px ${cardPopup.card.color}` }}>{cardPopup.card.name}</div>
+              {cardPopup.text && <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e2e8f0", marginTop: 3, fontWeight: "700" }}>{cardPopup.text}</div>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 変身の瞬間だけ画面を明るくします */}
       {transformFlash && (
@@ -1711,7 +1830,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         )}
         {showFight && (<div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 54, color: "#ffd700", textShadow: "0 0 30px #ffd700, 4px 4px 0 #7c2d12, -1px -1px 0 #000", letterSpacing: 6, animation: fightFadeOut ? "fightOut 0.5s ease forwards" : "fightIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>FIGHT!</div></div>)}
         {phase === "choose" && timer > 0 && timer <= 5 && (<div style={{ position: "absolute", inset: 0, zIndex: 19, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div key={`jk-cd-${timer}`} style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: timer <= 3 ? 120 : 96, color: timer <= 3 ? "#ef4444" : "#f59e0b", lineHeight: 1, opacity: 0.85, animation: "rouletteCountPop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>{timer}</div></div>)}
-        {dmgText && (<div style={{ position: "absolute", inset: 0, zIndex: 18, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dmgTextIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 58, color: dmgText.target === "enemy" ? "#fbbf24" : "#f87171", letterSpacing: 2, lineHeight: 1 }}>{dmgText.amount}</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 4 }}>ダメージ！</div></div></div>)}
+        {dmgText && (<div style={{ position: "absolute", inset: 0, zIndex: 18, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dmgTextIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>{dmgText.blocked ? (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 46, color: "#67e8f9", textShadow: "0 0 24px #22d3ee", letterSpacing: 2, lineHeight: 1 }}>🛡️ NO DAMAGE</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 6 }}>無効化！</div></>) : (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 58, color: dmgText.target === "enemy" ? "#fbbf24" : "#f87171", letterSpacing: 2, lineHeight: 1 }}>{dmgText.amount}</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 4 }}>ダメージ！</div></>)}</div></div>)}
         {kiryokuPhase === "announce" && (<div style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,rgba(0,10,40,0.85),rgba(10,0,40,0.85))", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "kiryokuIn 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 44, color: "#fff", textShadow: "0 0 20px #3b82f6, 0 0 40px #1d4ed8, 3px 3px 0 #000", letterSpacing: 2, lineHeight: 1.1 }}>気力全開<br />チャンス！</div><div style={{ marginTop: 10, fontSize: 12, color: "#93c5fd", letterSpacing: 6, animation: "pulse 0.6s infinite" }}>⚡ POWER UP ⚡</div></div></div>)}
         {dragonBurstPhase === "announce" && (<div style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,rgba(40,0,0,0.82),rgba(20,0,0,0.88))", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dragonBurstIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 46, color: "#fff", textShadow: "0 0 16px #ef4444, 0 0 32px #dc2626, 4px 4px 0 #000", letterSpacing: 2, lineHeight: 1.1 }}>ドラゴン<br />バースト！</div>{dragonBurstMultiplier > 1 && <div style={{ marginTop: 8, fontSize: 16, fontWeight: "900", color: "#fbbf24", animation: "pulse 0.4s infinite" }}>ATK × {dragonBurstMultiplier.toFixed(1)}</div>}</div></div>)}
         {clashFlash && <div style={{ position: "absolute", inset: 0, zIndex: 35, background: "radial-gradient(ellipse at center, rgba(255,200,50,0.9) 0%, rgba(255,150,0,0) 70%)", pointerEvents: "none", animation: "clashFlashAnim 0.3s ease forwards" }} />}
@@ -1727,6 +1846,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerTransformed={transformShown}
             enemyTransformed={false}
             playerAnimLoop={dragonBurstPhase === "janken"}
+            ultimateZoom={ultimateZoom}
             shot={shot}
             onShotHit={() => setShot(null)}
             onPlayerShot={handlePlayerShot}
@@ -1840,7 +1960,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       {(phase === "choose" || phase === "waiting_enemy") && (
         <div style={{ padding: "10px 12px 14px", background: "rgba(0,0,0,0.68)", borderTop: "1px solid #1f2937", position: "relative", zIndex: 2 }}>
           <div style={{ textAlign: "center", fontSize: 9, color: "#6b7280", letterSpacing: 4, marginBottom: 10 }}>─ 手を選べ！ ─</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 8px" }}>
+          {/* 自分のコマンドを画面中央に置き、敵側の表示は右端へ逃がします */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", padding: "0 8px", position: "relative" }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, position: "relative" }}>
               <div style={{ width: 136, display: "flex", justifyContent: "center", position: "relative" }}>
                 <JankenBtn hand="rock" playerCard={playerCard} onSelect={handleHandSelect} selected={playerHand} />
@@ -1855,7 +1976,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
                 ))}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, position: "absolute", right: 0, bottom: 0, transform: "scale(0.72)", transformOrigin: "bottom right", opacity: 0.9 }}>
               <div style={{ width: 136, display: "flex", justifyContent: "center" }}><EnemyHandDisplay hand={enemyHand} slot="top" phase={phase} /></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <EnemyHandDisplay hand={enemyHand} slot="left" phase={phase} />
