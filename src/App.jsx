@@ -144,7 +144,7 @@ const ENEMIES = [
   { id: "e003", name: "魔人ダーク",       hp: 3200, atk: 420, rock: "rock_punch", scissors: "scissors_slash", paper: "paper_beam", color: "#8b5cf6" },
 ];
 
-const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009"];
+const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009", "c010"];
 
 const SUPPORT_CARDS = [
   { id: "s001", name: "怒り", rarity: "SR", color: "#ef4444", glow: "#dc2626", description: "1段階変身した状態でバトル開始。孫悟空は界王拳状態からスタート。", timing: "battle_start", effect: "transform_start", illustSymbol: "🔥" },
