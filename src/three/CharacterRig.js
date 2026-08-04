@@ -181,9 +181,21 @@ export default class CharacterRig {
     const v = this._variants[key];
     if (!v || this._activeKey === key) return;
 
+    // 切り替え前の再生位置を覚えておきます。
+    // ここで頭から再生し直すと、たとえば被弾モーションの途中で変身が
+    // 解除されたときに「もう一度殴られて倒れる」動きが再生されてしまいます。
+    const cur = this.current;
+    const resumeTime = this.currentAction ? this.currentAction.time : 0;
+
     for (const k of Object.keys(this._variants)) {
       this._variants[k].scene.visible = k === key;
     }
+    // 裏に回るモデルのモーションは全部止めます。
+    // 残したままだと、戻ってきたときに古いアクションが重みを持ったままになり、
+    // 新しいモーションと混ざって妙なポーズになります。
+    if (this.mixer) this.mixer.stopAllAction();
+    if (v.mixer) v.mixer.stopAllAction();
+
     this._activeKey = key;
     this.model = v.scene;
     this.mixer = v.mixer;
@@ -191,10 +203,9 @@ export default class CharacterRig {
     this.currentAction = null;
     this._findBones();
 
-    // 今のモーションを新しいモデルでも続けて再生します
-    const cur = this.current;
+    // 今のモーションを、同じ再生位置から新しいモデルで続けます
     this.current = null;
-    if (cur) this.play(cur, { immediate: true });
+    if (cur) this.play(cur, { immediate: true, resumeTime });
     else this.play(MOTION.IDLE, { immediate: true });
   }
 
@@ -220,6 +231,32 @@ export default class CharacterRig {
     } catch (e) {
       console.warn("[CharacterRig] 変身後モデルを読み込めません:", url, e);
     }
+  }
+
+  /**
+   * 骨に当たらないトラックを捨てます。
+   *
+   * FBXのモーションには骨のほかに「Armature001」のような入れ物ノードの
+   * トラックが入っています。素体GLBの入れ物ノード名がたまたまこれと一致すると、
+   * そのノードの scale が 1 に上書きされ、モデルが100倍の大きさになります
+   * （素体は "Armature" なので当たらず、変身後だけ巨大化していました）。
+   * 骨以外のトラックは使わないので、ここで落としておきます。
+   */
+  _stripNonBoneTracks(clip) {
+    const THREE = this.THREE;
+    if (!this.model) return clip;
+    const bones = new Set();
+    this.model.traverse((o) => {
+      if (o.isBone) bones.add(THREE.PropertyBinding.sanitizeNodeName(o.name));
+    });
+    if (!bones.size) return clip;
+    const keep = clip.tracks.filter((t) => {
+      const i = t.name.lastIndexOf(".");
+      const node = i >= 0 ? t.name.slice(0, i) : t.name;
+      return bones.has(THREE.PropertyBinding.sanitizeNodeName(node));
+    });
+    if (keep.length === clip.tracks.length) return clip;
+    return new THREE.AnimationClip(clip.name, clip.duration, keep);
   }
 
   /**
@@ -295,16 +332,20 @@ export default class CharacterRig {
   _loadMotion(name) {
     if (this.actions[name]) return Promise.resolve(this.actions[name]);
     this._loading = this._loading || {};
-    if (this._loading[name]) return this._loading[name];
+    // 読み込み中の管理は「モデルごと」に分けます。
+    // ここを名前だけで共有すると、読み込み中に変身でモデルが入れ替わったとき、
+    // 別のモデルのミキサーに紐づいたアクションが返ってきて動きが壊れます。
+    const key = (this._activeKey || "normal") + ":" + name;
+    if (this._loading[key]) return this._loading[key];
     const p = this._loadMotionInner(name).then((action) => {
-      delete this._loading[name];
+      delete this._loading[key];
       return action;
     }, (err) => {
-      delete this._loading[name];
+      delete this._loading[key];
       console.warn("[CharacterRig] モーションを読み込めません:", name, err);
       return null;
     });
-    this._loading[name] = p;
+    this._loading[key] = p;
     return p;
   }
 
@@ -320,7 +361,8 @@ export default class CharacterRig {
     if (!clip) {
       if (m && m.file) {
         const data = await loadClips(m.file);
-        const raw = pickClip(data.clips, m.clip);
+        const raw0 = pickClip(data.clips, m.clip);
+        const raw = raw0 ? this._stripNonBoneTracks(raw0) : null;
         if (raw) clip = this._orientClip(raw, data.armatureQuaternion);
       }
       // 待機モーションだけは、ファイルが無い/読み込めない場合でも
@@ -396,6 +438,16 @@ export default class CharacterRig {
         if (opts.immediate || prev.paused) prev.stop();
         else prev.crossFadeTo(action, FADE, false);
       }
+      const dur = action.getClip().duration;
+      const ts = Math.abs(action.timeScale) || 1;
+      // モデルを入れ替えたときは、同じ再生位置から続けます
+      let at = 0;
+      if (opts.resumeTime != null && opts.resumeTime > 0) {
+        at = Math.min(opts.resumeTime, Math.max(0, dur - 1e-4));
+        action.time = at;
+      }
+      const elapsed = at / ts; // 開始からの実時間（秒）
+
       this.currentAction = action;
       this.current = name;
       this._applyFacing(name);
@@ -404,18 +456,22 @@ export default class CharacterRig {
       // （finished イベントに取りこぼしがあっても必ず待機へ戻すため）
       const meta = (this._motionMeta || {})[name] || {};
       if (!meta.loop && !meta.hold) {
-        const ts = Math.abs(action.timeScale) || 1;
-        this._oneShotLeft = action.getClip().duration / ts;
+        this._oneShotLeft = Math.max(0.001, dur / ts - elapsed);
       } else {
         this._oneShotLeft = -1;
       }
       // 弾を出すモーションなら、その瞬間までのカウントダウンを開始します。
       // モーションの読み込みが遅れても、実際に再生が始まってから数えるので
       // 「腕を伸ばす前に弾が出る」ことがありません。
-      this._shotLeft = meta.shotTime != null && meta.shotTime >= 0 ? meta.shotTime : -1;
+      if (meta.shotTime != null && meta.shotTime >= 0) {
+        const left = meta.shotTime - elapsed;
+        this._shotLeft = left > 0 ? left : -1; // 既に過ぎていれば撃たない
+      } else {
+        this._shotLeft = -1;
+      }
 
       // 変身モーションならフレーム計測を開始
-      this.transformElapsed = name === MOTION.TRANSFORM ? 0 : -1;
+      this.transformElapsed = name === MOTION.TRANSFORM ? elapsed : -1;
     };
 
     const existing = this.actions[name];
