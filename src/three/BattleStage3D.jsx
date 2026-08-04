@@ -87,6 +87,7 @@ export default function BattleStage3D({
   playerAnim = "idle",
   enemyAnim = "idle",
   playerTransformed = false,
+  playerTransformLevel = null, // 0/1/2 を渡すと多段変身（指定時は playerTransformed より優先）
   enemyTransformed = false,
   playerAnimLoop = false, // trueの間、1回再生のモーションも終わったら繰り返す（ドラゴンバースト用）
   enemyAnimLoop = false,
@@ -233,8 +234,10 @@ export default function BattleStage3D({
   // ---------- 変身状態 ----------
   useEffect(() => {
     const rig = stateRef.current.playerRig;
-    if (rig) rig.setTransformed(playerTransformed);
-  }, [playerTransformed]);
+    if (!rig) return;
+    if (playerTransformLevel != null) rig.setTransformLevel(playerTransformLevel);
+    else rig.setTransformed(playerTransformed);
+  }, [playerTransformed, playerTransformLevel]);
 
   useEffect(() => {
     const rig = stateRef.current.enemyRig;

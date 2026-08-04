@@ -78,6 +78,7 @@ export default class CharacterRig {
     this.auraMode = "normal";
     this.transformElapsed = -1; // 変身モーション開始からの経過秒（-1 = 再生していない）
     this.transformed = false;
+    this.transformLevel = 0;    // 0=通常 / 1=変身後 / 2=第2段階
 
     this.disposed = false;
     this._loading = {}; // 読み込み中のモーション（name -> Promise）
@@ -134,7 +135,8 @@ export default class CharacterRig {
     }
 
     // 変身後のモデルがあれば裏で用意しておきます（変身時に待たせないため）
-    if (cfg.transformedModel) this._prepareTransformedModel(cfg.transformedModel);
+    if (cfg.transformedModel) this._prepareTransformedModel(cfg.transformedModel, "transformed");
+    if (cfg.transformedModel2) this._prepareTransformedModel(cfg.transformedModel2, "transformed2");
 
     // まず待機モーションだけを確実に用意します。
     // ここを他のモーションと同時にダウンロードすると帯域を奪い合って
@@ -220,12 +222,12 @@ export default class CharacterRig {
     });
   }
 
-  /** 変身後のモデルを裏で読み込んでおきます */
-  async _prepareTransformedModel(url) {
+  /** 変身後のモデルを裏で読み込んでおきます（key: transformed / transformed2） */
+  async _prepareTransformedModel(url, key = "transformed") {
     try {
       const gltf = await loadModelInstance(url);
-      if (this.disposed || this._variants.transformed) return;
-      this._installModel("transformed", gltf.scene);
+      if (this.disposed || this._variants[key]) return;
+      this._installModel(key, gltf.scene);
       // 読み込み前に変身していた場合は、ここで反映します
       if (this.transformed && this.auraMode === "transformed") this._applyModelForState();
     } catch (e) {
@@ -593,20 +595,43 @@ export default class CharacterRig {
 
   /** 変身状態を切り替えます（true=変身後 / false=解除後） */
   setTransformed(on) {
-    if (this.transformed === on) return;
-    this.transformed = on;
-    if (!on) {
+    this.setTransformLevel(on ? 1 : 0);
+  }
+
+  /**
+   * 変身の段階を指定します。
+   *   0 = 通常 / 1 = transformedModel / 2 = transformedModel2
+   * ゴテンクスやGokuSS3のような多段変身で使います。
+   */
+  setTransformLevel(level) {
+    const lv = Math.max(0, Math.min(2, level | 0));
+    if (this.transformLevel === lv) return;
+    const prev = this.transformLevel || 0;
+    this.transformLevel = lv;
+    this.transformed = lv > 0;
+    if (lv === 0) {
       this.auraMode = "reverted";
       this._applyAuraVisibility();
       this._applyModelForState(); // 解除時は見た目もすぐ元に戻す
+    } else if (lv < prev) {
+      // 段階が下がるときは、変身モーションを待たずにすぐ切り替えます
+      this._applyModelForState();
     }
-    // on の場合、オーラとモデルは「変身モーションの startFrame に到達したら」
-    // 同時に切り替えます（update 内で処理）
+    // 段階が上がる場合、オーラとモデルは「変身モーションの startFrame に
+    // 到達したら」同時に切り替えます（update 内で処理）
+  }
+
+  /** 今の変身段階で表示すべきモデルの種類を返します */
+  _wantedVariant() {
+    const lv = this.transformLevel || 0;
+    if (lv >= 2 && this._variants.transformed2) return "transformed2";
+    if (lv >= 1 && this._variants.transformed) return "transformed";
+    return "normal";
   }
 
   /** 変身状態に合わせて、表示するモデルを選びます */
   _applyModelForState() {
-    const want = this.transformed && this._variants.transformed ? "transformed" : "normal";
+    const want = this._wantedVariant();
     if (this._variants[want]) this._activateModel(want);
   }
 
@@ -636,7 +661,10 @@ export default class CharacterRig {
       if (t && t.enabled) {
         const fps = this.config.fps || 30;
         const startSec = (t.startFrame || 0) / fps;
-        if (this.transformElapsed >= startSec && this.auraMode !== "transformed") {
+        // 段階が上がるとき（1→2）は auraMode が既に transformed のままなので、
+        // 表示すべきモデルが変わったかどうかも見て切り替えます。
+        const needSwap = this._activeKey !== this._wantedVariant();
+        if (this.transformElapsed >= startSec && (this.auraMode !== "transformed" || needSwap)) {
           this.transformed = true;
           this.auraMode = "transformed";
           this._applyAuraVisibility();

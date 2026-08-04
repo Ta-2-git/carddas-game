@@ -25,6 +25,7 @@ const TITLE_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/title.png
 const BATTLE_BG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/battle_bg.png.PNG";
 const IMG_CARD_GOKU = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku_card.png.PNG";
 const IMG_CARD_GOKU_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/71AAA89C-B4AF-423F-9BE4-D2CC74318FF0.png";
+const IMG_CARD_GOKU_SS3 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/8D809B5A-0E97-4B58-9458-4DE283208BB3.png";
 const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
 const IMG_PUNCH_SHEET = "";
 const IMG_BEAM_SHEET = "";
@@ -123,6 +124,9 @@ const CARDS = [
   // No.002 GokuSS1 … ステータス・技はNo.001の孫悟空と同じ。
   // じゃんけんに勝つとスーパーサイヤ人へ変身し、攻撃を受けると元に戻ります。
   { id: "c009", name: "GokuSS1", rarity: "SR", hp: 2500, atk: 350, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#fbbf24", isGoku: true, isGokuSS1: true, img: IMG_CARD_GOKU_SS1, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
+  // No.003 GokuSS3 … 2段階変身。じゃんけんに勝つとスーパーサイヤ人、
+  // さらに2回連続で勝つとスーパーサイヤ人3へ。負けると1段階戻ります。
+  { id: "c010", name: "GokuSS3", rarity: "SSR", hp: 2500, atk: 350, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#fbbf24", isGoku: true, isGokuSS3: true, img: IMG_CARD_GOKU_SS3, description: "じゃんけんに勝つとスーパーサイヤ人、2連勝でスーパーサイヤ人3へ！SS3はHP3倍・ATK2倍。負けると1段階戻る。" },
 ];
 
 const GOTENKS_CARD = {
@@ -1019,6 +1023,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const playerMaxHpRef = useRef(playerCard.hp);
   const playerAtkRef = useRef(playerCard.atk);
 
+  // ---- GokuSS3（2段階変身。基本の仕組みはゴテンクスと同じ）----
+  //   0=通常 / 1=スーパーサイヤ人 / 2=スーパーサイヤ人3
+  //   じゃんけんに勝つと1段階上がり（2段階目は2連勝が条件）、負けると1段階戻ります。
+  const isSS3Char = Boolean(playerCard.isGokuSS3);
+  const SS3_MUL = [{ hp: 1, atk: 1 }, { hp: 1.5, atk: 1.2 }, { hp: 3, atk: 2 }];
+  const [ss3Level, setSS3Level] = useState(0);
+  const ss3LevelRef = useRef(0);
+  const winStreakRef = useRef(0);        // じゃんけんの連勝数
+  const ss3BaseMaxHpRef = useRef(null);  // 変身前（素）の最大HPとATK
+  const ss3BaseAtkRef = useRef(null);
+
   // ---- 条件で発動するサポートカード ----
   const supEffect = supportCard?.effect;
   const loseStreakRef = useRef(0);              // じゃんけんの連敗数
@@ -1219,7 +1234,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   useEffect(() => {
     if (!rouletteState || !rouletteState.atkStopped || !rouletteState.defStopped) return;
     const t = setTimeout(() => {
-      const { atkResult, defResult, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, attacker, isFirstWin, ss1Win } = rouletteState;
+      const { atkResult, defResult, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, attacker, isFirstWin, ss1Win, ss3Win } = rouletteState;
       const isSpecial = atkResult === "special";
       let move;
       if (isSpecial) { move = attacker === "player" ? (playerCard.isGoku ? MOVES.rock_kamehameha : MOVES.rock_punch) : MOVES.rock_punch; }
@@ -1245,19 +1260,24 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
         setTimeout(() => { applySS1Transform(); }, 400);
         setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 400 + tms + 300);
+      } else if (ss3Win && attacker === "player") {
+        // GokuSS3 も、ルーレットが閉じてから変身を見せてから攻撃します
+        const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+        setTimeout(() => { applySS3Level(ss3Win); }, 400);
+        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 400 + tms + 300);
       } else { setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 100); }
     }, 1000);
     return () => clearTimeout(t);
   }, [rouletteState?.atkStopped, rouletteState?.defStopped]);
 
-  const startAttackRoulette = useCallback((attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win = false) => {
+  const startAttackRoulette = useCallback((attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win = false, ss3Win = 0) => {
     const atkLv = attacker === "player" ? atkRouletteLevelRef.current : enemyAtkRouletteLevelRef.current;
     const defLv = attacker === "player" ? enemyDefRouletteLevelRef.current : defRouletteLevelRef.current;
     const atkSlots = buildAttackSlots(atkLv);
     const defSlots = buildGuardSlots(defLv);
     atkIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
     defIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
-    setRouletteState({ atkSlots, atkIdx: atkIdxRef.current, atkStopped: false, atkResult: null, defSlots, defIdx: defIdxRef.current, defStopped: false, defResult: null, attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win });
+    setRouletteState({ atkSlots, atkIdx: atkIdxRef.current, atkStopped: false, atkResult: null, defSlots, defIdx: defIdxRef.current, defStopped: false, defResult: null, attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win, ss3Win });
     clearInterval(atkTimerRef2.current);
     atkTimerRef2.current = setInterval(() => { atkIdxRef.current = (atkIdxRef.current + 1) % ROULETTE_TOTAL; setRouletteState(prev => prev && !prev.atkStopped ? { ...prev, atkIdx: atkIdxRef.current } : prev); }, 30);
     clearInterval(defTimerRef2.current);
@@ -1375,6 +1395,57 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
   }, [isSS1Char, playerCard, animateValue]);
 
+  /**
+   * GokuSS3 の変身段階を切り替えます。
+   * 段階が上がるときは変身モーションを再生し、その再生時間(ms)を返します。
+   * 下がるときはモーション無しで即座に戻します。
+   */
+  const applySS3Level = useCallback((toLevel) => {
+    if (!isSS3Char) return 0;
+    const lv = Math.max(0, Math.min(2, toLevel));
+    const cur = ss3LevelRef.current;
+    if (lv === cur) return 0;
+    // 素のステータス（サポートカードの強化込み）を最初の変身時に覚えます
+    if (ss3BaseMaxHpRef.current == null) {
+      ss3BaseMaxHpRef.current = playerMaxHpRef.current;
+      ss3BaseAtkRef.current = playerAtkRef.current;
+    }
+    const baseMax = ss3BaseMaxHpRef.current, baseAtk = ss3BaseAtkRef.current;
+    const ratio = playerHpRef.current / Math.max(1, playerMaxHpRef.current);
+    const newMax = Math.floor(baseMax * SS3_MUL[lv].hp);
+    const newHp = Math.min(newMax, Math.max(1, Math.floor(newMax * ratio)));
+    const newAtk = Math.floor(baseAtk * SS3_MUL[lv].atk);
+    const prevHp = playerHpRef.current;
+
+    ss3LevelRef.current = lv; setSS3Level(lv);
+    setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
+    setPlayerHp(newHp); playerHpRef.current = newHp;
+    setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
+    animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
+    animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
+    animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
+
+    if (lv > cur) {
+      const label = lv === 2 ? "⚡⚡ スーパーサイヤ人3！！" : "⚡ スーパーサイヤ人！";
+      setBattleLog(l => [...l, `${label} HP${SS3_MUL[lv].hp}倍・ATK${SS3_MUL[lv].atk}倍！`]);
+      setPlayerAnim(MOTION.TRANSFORM);
+      const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
+      setTimeout(() => setPlayerAnim("idle"), tms + 50);
+      return tms;
+    }
+    setBattleLog(l => [...l, lv === 0 ? `変身解除！ 通常の状態に戻った。` : `1段階戻った！ スーパーサイヤ人へ。`]);
+    return 0;
+  }, [isSS3Char, playerCard, animateValue]);
+
+  /** じゃんけんに勝ったときに上がる変身段階（0 = 変身しない） */
+  const nextSS3Level = useCallback(() => {
+    if (!isSS3Char) return 0;
+    const cur = ss3LevelRef.current;
+    if (cur === 0) return 1;                                  // 1勝でスーパーサイヤ人
+    if (cur === 1 && winStreakRef.current >= 2) return 2;      // 2連勝でスーパーサイヤ人3
+    return 0;
+  }, [isSS3Char]);
+
   // ---- サポート「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
   const applySaiyanPower = useCallback(() => {
     if (saiyanUsedRef.current) return;
@@ -1448,7 +1519,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             if (isGotenks && forcedAttacker === "player") applyGotenksTransform();
             // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
             const dbSS1Win = isSS1Char && forcedAttacker === "player" && !ss1ActiveRef.current;
-            startAttackRoulette(forcedAttacker, move, baseAtk, forcedHand, forcedEHand, kaiokenActiveRef.current, false, dbSS1Win);
+            const dbSS3Win = forcedAttacker === "player" ? nextSS3Level() : 0;
+            startAttackRoulette(forcedAttacker, move, baseAtk, forcedHand, forcedEHand, kaiokenActiveRef.current, false, dbSS1Win, dbSS3Win);
           }, 2000);
         }, 2200);
       } else { setTimeout(() => startDragonBurst(newMult), 500); }
@@ -1461,12 +1533,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (isGotenks && attacker === "player") applyGotenksTransform();
     // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
     const dbSS1Win = isSS1Char && attacker === "player" && !ss1ActiveRef.current;
+    const dbSS3Win = attacker === "player" ? nextSS3Level() : 0;
     setBattleLog(l => [...l, `ドラゴンバースト！ ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！`]);
     setClashSparks(false); setDragonBurstPhase(null); setPlayerClashOffset(0); setEnemyClashOffset(0);
     setJankenResultLabel(null); setJankenResult(null); setPhase("attack"); setTimerActive(false);
     dragonBurstMultiplierRef.current = 1; setDragonBurstMultiplier(1);
-    setTimeout(() => { startAttackRoulette(attacker, move, baseAtk, hand, eHand, kaiokenActiveRef.current, false, dbSS1Win); }, 400);
-  }, [playerCard, enemyData, atkBonus, startDragonBurst, startAttackRoulette, playerCurrentAtk, isGotenks]);
+    setTimeout(() => { startAttackRoulette(attacker, move, baseAtk, hand, eHand, kaiokenActiveRef.current, false, dbSS1Win, dbSS3Win); }, 400);
+  }, [playerCard, enemyData, atkBonus, startDragonBurst, startAttackRoulette, playerCurrentAtk, isGotenks, nextSS3Level]);
 
   const handleDragonBurstResultRef = useRef(null);
   handleDragonBurstResultRef.current = handleDragonBurstResult;
@@ -1490,6 +1563,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setEnemyHand(eHand); setShowSet(false);
       // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
       const result = applyLoseStreak(judgeJanken(hand, eHand));
+      // 連勝数（GokuSS3 の2段階目の条件）
+      if (result === "win") winStreakRef.current += 1;
+      else if (result === "lose") winStreakRef.current = 0;
       setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
       if (result === "draw") {
         setBattleLog(l => [...l, `T${turn}: ドラゴンバースト！！`]);
@@ -1507,6 +1583,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       const isFirstWin = result === "win" && usesKaioken && kaiokenUnlockedRef.current && !kaiokenActiveRef.current;
       // GokuSS1 は「じゃんけんに勝ったら変身」
       const ss1Win = isSS1Char && result === "win" && attacker === "player" && !ss1ActiveRef.current;
+      // GokuSS3 は「1勝でSSJ / 2連勝でSSJ3」
+      const ss3Win = (result === "win" && attacker === "player") ? nextSS3Level() : 0;
       if (isGotenks && result === "win" && attacker === "player") applyGotenksTransform();
       setTimeout(() => {
         const latestGotenksAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
@@ -1514,10 +1592,10 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const latestEffAtk = (kaiokenActiveRef.current && attacker === "player") ? Math.floor(latestRawAtk * 1.5) : latestRawAtk;
         const latestBaseAtk = attacker === "player" ? latestEffAtk : enemyData.atk + atkBonus.enemy;
         setJankenResultLabel(null); setPhase("attack");
-        startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win);
+        startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win, ss3Win);
       }, 450);
     }, 600);
-  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak]);
+  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak, nextSS3Level]);
 
   const drainHp = useCallback((target, fromHp, toHp, onDone) => {
     const dmg = fromHp - toHp;
@@ -1611,6 +1689,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             if (isSS1Char && attacker === "enemy" && ss1ActiveRef.current) {
               const d = hitElapsed == null ? 0 : Math.max(0, HIT_DOWN_MS - hitElapsed);
               if (d > 0) setTimeout(() => revertSS1(), d); else revertSS1();
+            }
+            // GokuSS3: 攻撃を受けたら1段階戻る（倒れているあいだに切り替えます）
+            if (isSS3Char && attacker === "enemy" && ss3LevelRef.current > 0) {
+              const back = ss3LevelRef.current - 1;
+              const d = hitElapsed == null ? 0 : Math.max(0, HIT_DOWN_MS - hitElapsed);
+              if (d > 0) setTimeout(() => applySS3Level(back), d); else applySS3Level(back);
             }
             if (needsDash) { setPlayerAnim("idle"); setEnemyAnim("idle"); setPlayerOffset(0); }
             setDamageNum(null); setCurrentMove(null);
@@ -1734,6 +1818,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {playerShownAtk}</div>
             {kaiokenActive && (<div style={{ ...BADGE, color: "#ff4400", background: "rgba(255,68,0,0.18)", border: "1px solid rgba(255,68,0,0.55)", animation: "pulse 0.6s infinite" }}>界王拳🔥</div>)}
             {ss1Active && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
+            {ss3Level === 1 && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
+            {ss3Level === 2 && (<div style={{ ...BADGE, color: "#fde047", background: "rgba(253,224,71,0.2)", border: "1px solid rgba(253,224,71,0.6)", animation: "pulse 0.4s infinite" }}>SS3⚡⚡</div>)}
             {saiyanPowerActive && (<div style={{ ...BADGE, color: "#fb923c", background: "rgba(251,146,60,0.18)", border: "1px solid rgba(251,146,60,0.55)", animation: "pulse 0.6s infinite" }}>ATK×2🔥</div>)}
             {barrierReady && (<div style={{ ...BADGE, color: "#67e8f9", background: "rgba(103,232,249,0.14)", border: "1px solid rgba(103,232,249,0.5)" }}>気のバリア🛡️</div>)}
             {isGotenks && gotenksLevel === 1 && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.8s infinite" }}>⚡SSJ</div>)}
@@ -1835,6 +1921,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : playerAnim}
             enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
             playerTransformed={transformShown}
+            playerTransformLevel={isSS3Char ? ss3Level : null}
             enemyTransformed={false}
             playerAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}

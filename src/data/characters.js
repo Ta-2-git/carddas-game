@@ -202,6 +202,23 @@ export const CHARACTERS = {
     aura: GOKU_AURA(AURA_PRESETS.gold),
   },
 
+  // ---------------- No.003 GokuSS3（2段階変身） ----------------
+  // モデル・モーション・技はNo.001と同じ。違いは次の2点です。
+  //   ・2段階変身（1段階目=スーパーサイヤ人 / 2段階目=スーパーサイヤ人3）
+  //   ・必殺技の動画が「超かめはめ波」
+  c010: {
+    ...GOKU_BASE,
+    name: "GokuSS3",
+    transformedModel:  `${R2}/goku_ssj.glb`,
+    transformedModel2: `${R2}/goku_ssj3.glb`,
+    aura: GOKU_AURA(AURA_PRESETS.gold),
+    ultimate: {
+      ...GOKU_BASE.ultimate,
+      video: "/kamehameha_super.mp4",
+      videoDuration: 2.58,   // 実測 2.578秒 / 1920x1080 / 約30fps
+    },
+  },
+
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------
   c002: {
     name: "ブルーS太郎",
@@ -294,6 +311,7 @@ export function getPreloadUrls() {
     if (!c.model) continue;
     urls.push(c.model);
     if (c.transformedModel) urls.push(c.transformedModel);
+    if (c.transformedModel2) urls.push(c.transformedModel2);
     const idle = (c.motions || {}).idle;
     if (idle && idle.file) urls.push(idle.file);
   }
