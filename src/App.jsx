@@ -1027,8 +1027,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const saiyanUsedRef = useRef(false);
   const [barrierReady, setBarrierReady] = useState(supEffect === "ki_barrier");
   const barrierReadyRef = useRef(supEffect === "ki_barrier");
-  // 必殺技の溜め中だけカメラを自キャラへ寄せます
-  const [ultimateZoom, setUltimateZoom] = useState(false);
   // カード発動を知らせる小さな表示
   const [cardPopup, setCardPopup] = useState(null);
   const popCard = useCallback((card, text) => {
@@ -1535,7 +1533,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const p = pendingShotRef.current;
     if (!p) return;
     pendingShotRef.current = null;
-    setUltimateZoom(false);   // 弾が出たら必ず引きます（保険）
     setShot({ key: Date.now(), from: "player", kind: p.kind });
     setTimeout(p.onLand, p.travelMs);
   }, []);
@@ -1646,13 +1643,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
     if (attacker === "player") {
       if (playerCard.isGoku) {
-        if (isUltimate) {
-          setPlayerAnim("beam");
-          // 溜めのあいだキャラに寄り、エネルギー波が出る直前に引きます
-          setUltimateZoom(true);
-          const shotMs = Math.round(getMotionShotDelay(playerCard.id, MOTION.ULTIMATE) * 1000);
-          setTimeout(() => setUltimateZoom(false), Math.max(300, shotMs - 450));
-        }
+        if (isUltimate) setPlayerAnim("beam");
         else if (useKiBlast) setPlayerAnim(MOTION.KI_BLAST);
         else if (move.id === "scissors_kick") setPlayerAnim("kick");
         else setPlayerAnim("punch");
@@ -1846,7 +1837,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerTransformed={transformShown}
             enemyTransformed={false}
             playerAnimLoop={dragonBurstPhase === "janken"}
-            ultimateZoom={ultimateZoom}
             shot={shot}
             onShotHit={() => setShot(null)}
             onPlayerShot={handlePlayerShot}

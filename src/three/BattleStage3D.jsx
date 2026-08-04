@@ -79,36 +79,6 @@ function applyLayout(S, w, h) {
   if (S.enemyRig) { S.enemyRig.root.position.x = spread; S.enemyRig.root.scale.setScalar(scale); }
   S.renderer.setSize(w, h);
   frameCamera(S.camera, aspect, halfW);
-
-  // 必殺技のときに寄る先を、今の画面比率に合わせて用意しておきます
-  const THREE = S.THREE;
-  if (THREE) {
-    const px = -spread; // 自キャラの立ち位置
-    S.camBase = { pos: S.camera.position.clone(), look: new THREE.Vector3(0, FIT_CENTER_Y, 0) };
-    S.camZoom = {
-      pos: new THREE.Vector3(px * 0.45, FIT_CENTER_Y + 0.12, S.camera.position.z * 0.52),
-      look: new THREE.Vector3(px * 0.92, FIT_CENTER_Y - 0.08, 0),
-    };
-    S.camLook = S.camLook || new THREE.Vector3();
-  }
-}
-
-/** 必殺技のズームを毎フレームなめらかに寄せ引きします */
-function updateCamera(S, dt) {
-  if (!S.camBase || !S.camZoom || !S.camera) return;
-  const target = S.zoomTarget || 0;
-  const cur = S.zoomK == null ? 0 : S.zoomK;
-  const next = cur + (target - cur) * Math.min(1, dt * 5);
-  S.zoomK = Math.abs(next - target) < 0.002 ? target : next;
-  const t = S.zoomK;
-  if (t <= 0.002) {
-    S.camera.position.copy(S.camBase.pos);
-    S.camera.lookAt(S.camBase.look);
-    return;
-  }
-  S.camera.position.lerpVectors(S.camBase.pos, S.camZoom.pos, t);
-  S.camLook.lerpVectors(S.camBase.look, S.camZoom.look, t);
-  S.camera.lookAt(S.camLook);
 }
 
 export default function BattleStage3D({
@@ -120,7 +90,6 @@ export default function BattleStage3D({
   enemyTransformed = false,
   playerAnimLoop = false, // trueの間、1回再生のモーションも終わったら繰り返す（ドラゴンバースト用）
   enemyAnimLoop = false,
-  ultimateZoom = false, // trueの間、自キャラにカメラを寄せます（必殺技の溜め）
   shot = null,          // { key, from: "player"|"enemy", kind: "kiBlast"|"ultimate" }
   onShotHit = null,     // 着弾時に呼ばれます
   onPlayerShot = null,  // 自キャラが腕を伸ばしきった瞬間（弾を出す合図）
@@ -187,7 +156,6 @@ export default function BattleStage3D({
       playerRig.update(dt);
       enemyRig.update(dt);
       updateShots(S, dt, onShotHit);
-      updateCamera(S, dt);
       renderer.render(scene, camera);
     };
     tick();
@@ -272,11 +240,6 @@ export default function BattleStage3D({
     const rig = stateRef.current.enemyRig;
     if (rig) rig.setTransformed(enemyTransformed);
   }, [enemyTransformed]);
-
-  // ---------- 必殺技の溜め中はカメラを寄せる ----------
-  useEffect(() => {
-    stateRef.current.zoomTarget = ultimateZoom ? 1 : 0;
-  }, [ultimateZoom]);
 
   // ---------- 気弾・必殺技の発射 ----------
   useEffect(() => {
