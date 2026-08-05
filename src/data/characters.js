@@ -32,8 +32,9 @@ export const AURA_PRESETS = {
   yellow: { color: "#ffcc11", boltColor: "#7fdfff" },
   // スーパーサイヤ人用。髪の色を実測すると (249,207,88) で、
   // yellow(255,204,17) とは赤・緑がほぼ同じため髪がオーラに埋もれます。
-  // 緑を落とした橙寄りの金色にして、金髪が浮き上がるようにしています。
-  gold:   { color: "#ff8c00", boltColor: "#7fdfff" },
+  // 緑を落とした金色にして、金髪が浮き上がるようにしています。
+  // （#ffcc11 まで明るくすると髪と同化するので、この辺りが限界です）
+  gold:   { color: "#ffaa00", boltColor: "#7fdfff" },
   red:    { color: "#ff2010", boltColor: "#ffd8a0" },
   blue:   { color: "#1058ff", boltColor: "#a8ecff" },
   purple: { color: "#9e1aff", boltColor: "#e6b4ff" },
@@ -219,9 +220,9 @@ export const CHARACTERS = {
       // 第2段階（スーパーサイヤ人3）は一回り大きく、濃く、稲妻を強くします
       transformed2: {
         enabled: true, ...AURA_PRESETS.gold,
-        // 濃さ（透明度・発光量）はSS1と同じにして、色だけ深い金橙に、
+        // 濃さ（透明度・発光量）はSS1と同じ。色も同じ金色にして、
         // 稲妻だけ強くします
-        color: "#ff6600",
+        color: "#ffaa00",
         scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 57, thunder: true,
         backIntensity: 0.85,   // SS1と同じ
         frontIntensity: 0.13,  // SS1と同じ（上げるとキャラが白飛びします）

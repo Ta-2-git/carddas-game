@@ -1103,6 +1103,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   /** 気力ゲージによる攻撃力の倍率 */
   const kiMul = useCallback(() => (kiFullRef.current ? 2 : 1), []);
   const enemyKiMul = useCallback(() => (enemyKiFullRef.current ? 2 : 1), []);
+  /** 満タンの気力を使った側のゲージを空にします（1回の攻撃で消費） */
+  const consumeKi = useCallback((who) => {
+    if (who === "player") {
+      if (!kiFullRef.current) return;
+      kiFullRef.current = false; setKiFull(false);
+      kiGaugeRef.current = 0; setKiGauge(0);
+      setBattleLog(l => [...l, `気力を使い切った。`]);
+    } else {
+      if (!enemyKiFullRef.current) return;
+      enemyKiFullRef.current = false; setEnemyKiFull(false);
+      enemyKiGaugeRef.current = 0; setEnemyKiGauge(0);
+    }
+  }, []);
 
   // ---- 条件で発動するイベントカード ----
   const evEffect = eventCard?.effect;
@@ -1738,6 +1751,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setDmgText({ amount: dealt, target: hitTarget, blocked });
       // サポート「サイヤ人の力」: 一度攻撃したらATKは元に戻ります
       if (attacker === "player") setTimeout(() => revertSaiyanPower(), 1200);
+      // 気力ゲージは1回の攻撃で使い切ります
+      setTimeout(() => consumeKi(attacker), 1200);
       setTimeout(() => {
         setDmgText(null);
         if (hitTarget === "enemy") { setEnemyHp(newHp); enemyHpRef.current = newHp; }
