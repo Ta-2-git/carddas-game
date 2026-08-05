@@ -381,6 +381,37 @@ const HAND_COLOR = { rock: "#ef4444", scissors: "#f59e0b", paper: "#3b82f6" };
 const HAND_LABEL = { rock: "グー", scissors: "チョキ", paper: "パー" };
 const HAND_BG = { rock: "#1a0505", scissors: "#1a1005", paper: "#030d1a" };
 
+// 気力ゲージ（10メモリ）。満タンになると黄色く輝き、攻撃力が2倍になります。
+// flip=true で右詰め（相手側）になります。
+const KiGauge = ({ value, max, full, flip }) => {
+  const cells = Array.from({ length: max }).map((_, i) => {
+    const idx = flip ? max - 1 - i : i;
+    const on = idx < value;
+    return (
+      <div key={i} style={{
+        flex: 1, height: 9, borderRadius: 2,
+        background: on ? (full ? "linear-gradient(180deg,#fffbe6,#fbbf24)" : "linear-gradient(180deg,#fde047,#ca8a04)") : "rgba(255,255,255,0.07)",
+        border: `1px solid ${on ? (full ? "#fef08a" : "#eab30888") : "rgba(255,255,255,0.10)"}`,
+        boxShadow: on ? (full ? "0 0 10px #fbbf24, 0 0 18px #f59e0b" : "0 0 5px #eab30866") : "none",
+        transition: "all 0.25s",
+        animation: full ? `pulse 0.6s ${i * 0.04}s infinite` : "none",
+      }} />
+    );
+  });
+  const label = (
+    <div style={{ fontFamily: "'Courier New',monospace", fontSize: 10, fontWeight: "900", letterSpacing: 1, color: full ? "#fbbf24" : "#64748b", textShadow: full ? "0 0 10px #f59e0b" : "none", flexShrink: 0, minWidth: 30, textAlign: flip ? "left" : "right" }}>
+      {full ? "MAX" : `${value}/${max}`}
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 5, flexDirection: flip ? "row-reverse" : "row" }}>
+      <div style={{ fontFamily: "monospace", fontSize: 10, fontWeight: "900", letterSpacing: 1, color: full ? "#fbbf24" : "#64748b", textShadow: full ? "0 0 10px #f59e0b" : "none", flexShrink: 0 }}>気力</div>
+      <div style={{ display: "flex", gap: 2, flex: 1 }}>{cells}</div>
+      {label}
+    </div>
+  );
+};
+
 // HPバーの下に並ぶ ATK / 状態の表示（見やすさ優先で大きめ）
 const BADGE = {
   fontSize: 14, fontFamily: "monospace", fontWeight: "900",
@@ -1045,20 +1076,33 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const kiGaugeRef = useRef(0);
   const [kiFull, setKiFull] = useState(false);
   const kiFullRef = useRef(false);
-  /** じゃんけんの勝敗が決まった瞬間に呼びます。attacked=true は攻撃を受けた側 */
-  const addKi = useCallback((attacked) => {
-    if (kiFullRef.current) return;
-    const gain = attacked ? (1 + Math.floor(Math.random() * 2))   // 被弾は1〜2
-                          : (2 + Math.floor(Math.random() * 2));  // 攻撃は2〜3
-    const next = Math.min(KI_MAX, kiGaugeRef.current + gain);
-    kiGaugeRef.current = next; setKiGauge(next);
-    if (next >= KI_MAX) {
-      kiFullRef.current = true; setKiFull(true);
-      setBattleLog(l => [...l, `気力が満ちた！ 攻撃力2倍！`]);
-    }
-  }, []);
+  const [enemyKiGauge, setEnemyKiGauge] = useState(0);
+  const enemyKiGaugeRef = useRef(0);
+  const [enemyKiFull, setEnemyKiFull] = useState(false);
+  const enemyKiFullRef = useRef(false);
+  /**
+   * じゃんけんの勝敗が決まった瞬間に、両者の気力ゲージを進めます。
+   * 攻撃する側は2〜3、受ける側は1〜2増えます。
+   */
+  const addKi = useCallback((playerAttacked) => {
+    const bump = (gaugeRef, setGauge, fullRef, setFull, attacked, label) => {
+      if (fullRef.current) return;
+      const gain = attacked ? (1 + Math.floor(Math.random() * 2))
+                            : (2 + Math.floor(Math.random() * 2));
+      const next = Math.min(KI_MAX, gaugeRef.current + gain);
+      gaugeRef.current = next; setGauge(next);
+      if (next >= KI_MAX) {
+        fullRef.current = true; setFull(true);
+        setBattleLog(l => [...l, `${label}の気力が満ちた！ 攻撃力2倍！`]);
+      }
+    };
+    // playerAttacked = true … 自分が攻撃を受けた（＝敵が攻撃した）
+    bump(kiGaugeRef, setKiGauge, kiFullRef, setKiFull, playerAttacked, "自分");
+    bump(enemyKiGaugeRef, setEnemyKiGauge, enemyKiFullRef, setEnemyKiFull, !playerAttacked, enemyData.name);
+  }, [enemyData]);
   /** 気力ゲージによる攻撃力の倍率 */
   const kiMul = useCallback(() => (kiFullRef.current ? 2 : 1), []);
+  const enemyKiMul = useCallback(() => (enemyKiFullRef.current ? 2 : 1), []);
 
   // ---- 条件で発動するイベントカード ----
   const evEffect = eventCard?.effect;
@@ -1552,7 +1596,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setBattleLog(l => [...l, `ドラゴンバースト継続！ ATK×${newMult.toFixed(1)}`]);
       setPlayerHand(null); setEnemyHand(null); setJankenResult(null); setJankenResultLabel(null); setPhase("attack"); setTimerActive(false);
       if (newMult >= 2.0) {
-        const playerTotalAtk = playerEffAtk; const enemyTotalAtk = enemyData.atk + (atkBonus?.enemy || 0);
+        const playerTotalAtk = playerEffAtk; const enemyTotalAtk = Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul());
         const forcedAttacker = playerTotalAtk >= enemyTotalAtk ? "player" : "enemy";
         const forcedHand = forcedAttacker === "player" ? hand : eHand; const forcedEHand = forcedAttacker === "player" ? eHand : hand;
         const moveId = forcedAttacker === "player" ? playerCard[forcedHand] : enemyData[forcedEHand];
@@ -1578,7 +1622,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const attacker = result === "win" ? "player" : "enemy";
     const moveId = attacker === "player" ? playerCard[hand] : enemyData[eHand];
     const move = MOVES[moveId];
-    const baseAtk = attacker === "player" ? Math.floor(playerEffAtk * currentMultiplier) : Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * currentMultiplier);
+    const baseAtk = attacker === "player" ? Math.floor(playerEffAtk * currentMultiplier) : Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul() * currentMultiplier);
     if (isGotenks && attacker === "player") applyGotenksTransform();
     // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
     const dbSS1Win = isSS1Char && attacker === "player" && !ss1ActiveRef.current;
@@ -1628,7 +1672,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       const gotenksEffAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
       const rawPlayerAtk = isGotenks ? gotenksEffAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
       const effectivePlayerAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? rawPlayerAtk * 1.5 : rawPlayerAtk) * kiMul());
-      const baseAtk = attacker === "player" ? effectivePlayerAtk : enemyData.atk + atkBonus.enemy;
+      const baseAtk = attacker === "player" ? effectivePlayerAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul());
       setCurrentMove(pendingMove);
       const isFirstWin = result === "win" && usesKaioken && kaiokenUnlockedRef.current && !kaiokenActiveRef.current;
       // GokuSS1 は「じゃんけんに勝ったら変身」
@@ -1640,7 +1684,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const latestGotenksAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
         const latestRawAtk = isGotenks ? latestGotenksAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
         const latestEffAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? latestRawAtk * 1.5 : latestRawAtk) * kiMul());
-        const latestBaseAtk = attacker === "player" ? latestEffAtk : enemyData.atk + atkBonus.enemy;
+        const latestBaseAtk = attacker === "player" ? latestEffAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul());
         setJankenResultLabel(null); setPhase("attack");
         startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win, ss3Win);
       }, 450);
@@ -1866,7 +1910,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, marginTop: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {playerShownAtk}</div>
-            {kiFull && (<div style={{ ...BADGE, color: "#7dd3fc", background: "rgba(125,211,252,0.18)", border: "1px solid rgba(125,211,252,0.6)", animation: "pulse 0.5s infinite" }}>気力MAX⚡ATK×2</div>)}
+            {kiFull && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.6)", animation: "pulse 0.5s infinite" }}>気力MAX⚡ATK×2</div>)}
             {kaiokenActive && (<div style={{ ...BADGE, color: "#ff4400", background: "rgba(255,68,0,0.18)", border: "1px solid rgba(255,68,0,0.55)", animation: "pulse 0.6s infinite" }}>界王拳🔥</div>)}
             {ss1Active && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
             {ss3Level === 1 && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
@@ -1882,25 +1926,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           </div>
         </div>
 
-        {/* 気力ゲージ … 10メモリ貯まると輝き、以降の攻撃力が2倍になります */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-          <div style={{ fontFamily: "monospace", fontSize: 11, fontWeight: "900", letterSpacing: 1, color: kiFull ? "#7dd3fc" : "#64748b", textShadow: kiFull ? "0 0 10px #38bdf8" : "none", flexShrink: 0 }}>気力</div>
-          <div style={{ display: "flex", gap: 3, flex: 1 }}>
-            {Array.from({ length: KI_MAX }).map((_, i) => {
-              const on = i < kiGauge;
-              return (
-                <div key={i} style={{
-                  flex: 1, height: 9, borderRadius: 2,
-                  background: on ? (kiFull ? "linear-gradient(180deg,#e0f2fe,#38bdf8)" : "linear-gradient(180deg,#7dd3fc,#0284c7)") : "rgba(255,255,255,0.07)",
-                  border: `1px solid ${on ? (kiFull ? "#bae6fd" : "#0ea5e988") : "rgba(255,255,255,0.10)"}`,
-                  boxShadow: on ? (kiFull ? "0 0 10px #38bdf8, 0 0 18px #0ea5e9" : "0 0 5px #0ea5e966") : "none",
-                  transition: "all 0.25s",
-                  animation: kiFull ? `pulse 0.6s ${i * 0.04}s infinite` : "none",
-                }} />
-              );
-            })}
-          </div>
-          <div style={{ fontFamily: "'Courier New',monospace", fontSize: 11, fontWeight: "900", color: kiFull ? "#7dd3fc" : "#64748b", flexShrink: 0, minWidth: 34, textAlign: "right" }}>{kiGauge}/{KI_MAX}</div>
+        {/* 気力ゲージ … 10メモリ貯まると輝き、以降その側の攻撃力が2倍になります。
+            HPバーと同じ3分割にして、左が自分・右が相手です。 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, marginTop: 6, alignItems: "center" }}>
+          <KiGauge value={kiGauge} max={KI_MAX} full={kiFull} flip={false} />
+          <div />
+          <KiGauge value={enemyKiGauge} max={KI_MAX} full={enemyKiFull} flip={true} />
         </div>
       </div>
 

@@ -173,12 +173,13 @@ const GOKU_BASE = {
 
 // 変身オーラの共通設定。色だけ差し替えて使います。
 // startFrame は「変身モーション開始から何フレーム目でオーラとモデルを
-// 切り替えるか」。実測では素材3.0秒で両手を振り下ろし始め、4.5秒まで
-// 下ろしたままなので、下ろしきった3.7秒あたりで切り替えます。
-// 5.5秒を2秒に詰めた再生（2.75倍速）では 3.7/2.75 = 1.35秒 ＝ 40フレーム目。
+// 切り替えるか」。実測では素材5.0秒から頭が持ち上がり（頭の高さ -0.5 →
+// 5.1秒で0.6 → 5.25秒で1.9）、少し上を向く姿勢になります。
+// 5.5秒を2秒に詰めた再生（2.75倍速）では 5.25/2.75 = 1.91秒 ＝ 57フレーム目。
+// モーション全体が2秒なので、これが実質いちばん遅らせられる位置です。
 const GOKU_AURA = (preset) => ({
   normal:      { enabled: false },
-  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 40, thunder: true },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 57, thunder: true },
   reverted:    { enabled: false },
 });
 
@@ -218,10 +219,13 @@ export const CHARACTERS = {
       // 第2段階（スーパーサイヤ人3）は一回り大きく、濃く、稲妻を強くします
       transformed2: {
         enabled: true, ...AURA_PRESETS.gold,
-        scale: 1.5, opacity: 0.95, yOffset: 0, startFrame: 40, thunder: true,
-        backIntensity: 1.15,   // 既定0.85
-        frontIntensity: 0.16,  // 既定0.13（上げすぎるとキャラが白飛びします）
-        boltIntensity: 0.5,    // 既定0.28
+        // 濃さ（透明度・発光量）はSS1と同じにして、色だけ深い金橙に、
+        // 稲妻だけ強くします
+        color: "#ff6600",
+        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 57, thunder: true,
+        backIntensity: 0.85,   // SS1と同じ
+        frontIntensity: 0.13,  // SS1と同じ（上げるとキャラが白飛びします）
+        boltIntensity: 0.7,    // 既定0.28 → 稲妻を強く
         boltLayers: 2,         // 位相のずれた稲妻を重ねて密度を上げる
       },
     },
