@@ -7,6 +7,10 @@
 //  ブラウザは「利用者が一度も触っていないページ」では音を鳴らせません。
 //  そのため再生に失敗しても例外にせず、最初のタップ/クリックのときに
 //  もう一度だけ鳴らし直します（unlock）。
+//
+//  鳴らしっぱなしにする音（変身のオーラ・ルーレットの回転音）だけは
+//  Web Audio を使います。<audio> だと音量の上限が 1.0 で足りないのと、
+//  折り返し位置をフレーム単位で指定できないためです。
 // =============================================================
 
 const R2 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev";
@@ -23,22 +27,50 @@ export const SE = {
   melee: url("nc414736_打撃音（弱）加工済み.mp3"),                   // 近接攻撃
   ultimate: url("nc414749_エネルギー爆発音３選加工済み.mp3"),        // かめはめ波 / 超かめはめ波 / ファイナルフラッシュ
   kiBlast: url("nc414744_ビーム発射音（弱）加工済み.mp3"),           // 気弾
-  aura: url("nc414748_エネルギー溜め・増幅音７選加工済み.mp3"),      // 変身後の気のオーラ（ループ）
   dragonBurst: url("nc432033_DB_ぶつけ合い.wav"),                    // ドラゴンバーストの打ち合い
+  aura: url("nc116127_超サイヤ人に変身.wav"),                        // 変身＋その後の気のオーラ（ループ）
+  scouter: url("nc116296_スカウター.wav"),                           // ステータス表示・上昇
+  cursor: url("カーソル移動3.mp3"),                                  // カード選択・メニュー
+  cancel: url("キャンセル1.mp3"),                                    // じゃんけんの手を選ぶ
+  rouletteSpin: url("電子ルーレット回転中.mp3"),                     // ルーレット回転中（ループ）
+  rouletteStop: url("電子ルーレット停止ボタンを押す.mp3"),           // ルーレット停止
 };
 
 const BGM_VOLUME = 0.35;
 const SE_VOLUME = 0.7;
 
-// ---- オーラ音の調整値 ----------------------------------------
-// この音源は実測で
-//   ・先頭0.8秒が完全な無音、そこから0.8秒かけて音が立ち上がる
-//   ・立ち上がったあとは 9.68秒まで平坦（波形の最大値 0.13〜0.18）
-// という作りです。他の効果音は最大 0.35〜0.76 あるので、そのまま鳴らすと
-// 埋もれて聞こえません。無音部分を飛ばし、音量を持ち上げて鳴らします。
-const AURA_LOOP_START = 1.6;  // 立ち上がりきったところから
-const AURA_LOOP_END = 9.4;    // 終わりぎわを避けて折り返す
-const AURA_GAIN = 3.0;        // 0.18 × 3.0 ＝ 0.54。近接音とほぼ同じ大きさ
+// 効果音ごとの音量と長さの調整。
+// 素材の波形を実測した最大値をもとに、だいたい同じ大きさに揃えています。
+//   打撃 0.76 / 気弾 0.62 / スカウター 0.62 / 停止 0.48 / カーソル 0.43
+//   キャンセル 0.38 / 打ち合い 0.38 / 爆発 0.35
+const SE_OPTIONS = {
+  // スカウターは3.6秒あり、数値のカウントアップ（約0.9秒）より長いので
+  // 頭の電子音＋走査音のところで切ります
+  [SE.scouter]: { volume: 0.85, maxMs: 1600 },
+  [SE.dragonBurst]: { volume: 1.0 },
+  [SE.ultimate]: { volume: 1.0 },
+  [SE.cursor]: { volume: 0.75 },
+  [SE.cancel]: { volume: 0.85 },
+  [SE.rouletteStop]: { volume: 0.8 },
+};
+
+// ---- ループする音の設定 --------------------------------------
+// aura … 全長53.2秒。先頭が「変身する瞬間」の音で、そのあとは気を纏って
+//        いる音がずっと続きます。1周目は先頭から鳴らし、2周目以降は
+//        変身音を飛ばして繰り返します。
+//        飛ばす位置は 2.5秒。実測すると変身音は 1.0秒ではまだ鳴っていて
+//        （波形 0秒=0.25 → 1.0秒=0.177 → 1.5秒=0.086 → 2.0秒=0.055）、
+//        2.5秒でようやくオーラ音と同じ 0.04〜0.06 に落ち着きます。
+//        1.0秒で折り返すと、折り返した瞬間だけ音量が2.6倍に跳ねます
+//        （実測 折り返し前0.345 → 直後0.901）。2.5秒なら 0.345→0.341 で
+//        つなぎ目が分かりません。
+//        変身音とオーラ音で3〜4倍の音量差があるので、変身音が鳴り終わる
+//        あたりでゲインを上げ、オーラ音が埋もれないようにします。
+// rouletteSpin … 2.67秒。全体が平坦（0.24前後）なので丸ごと繰り返します。
+const LOOP_SPECS = {
+  aura: { src: SE.aura, loopStart: 2.5, gain: 2.4, gainAfter: 5.8, rampAt: 1.0, rampDur: 0.4 },
+  rouletteSpin: { src: SE.rouletteSpin, loopStart: 0, gain: 1.2 },
+};
 
 // ---- 自動再生の解除 ----------------------------------------
 let unlocked = false;
@@ -69,7 +101,7 @@ function safePlay(el, retry) {
   if (p && typeof p.catch === "function") {
     p.catch(() => {
       // 自動再生を止められた場合だけ、最初のタップまで待ちます
-      if (!unlocked && retry && pending.length < 4) pending.push(retry);
+      if (!unlocked && retry && pending.length < 6) pending.push(retry);
     });
   }
 }
@@ -89,11 +121,25 @@ function baseAudio(src) {
 }
 
 /** 効果音を1回鳴らします */
-export function playSe(src, volume = SE_VOLUME) {
+export function playSe(src, volume = null) {
   if (!src || typeof Audio === "undefined") return;
+  const opt = SE_OPTIONS[src] || {};
   const el = baseAudio(src).cloneNode();
-  el.volume = volume;
+  el.volume = Math.min(1, volume != null ? volume : (opt.volume != null ? opt.volume : SE_VOLUME));
   safePlay(el);
+  // 長い素材は途中で切ります（最後だけ小さくして、ぷつっと切れないように）
+  if (opt.maxMs) {
+    const fade = 250;
+    setTimeout(() => {
+      const from = el.volume;
+      const t0 = Date.now();
+      const id = setInterval(() => {
+        const p = (Date.now() - t0) / fade;
+        el.volume = Math.max(0, from * (1 - p));
+        if (p >= 1) { clearInterval(id); el.pause(); }
+      }, 25);
+    }, Math.max(0, opt.maxMs - fade));
+  }
 }
 
 /** 音源を先に取りに行っておきます（鳴らす瞬間に間に合わせるため） */
@@ -102,14 +148,11 @@ export function preloadAudio(list) {
   for (const src of list) { if (src) baseAudio(src).load(); }
 }
 
-// ---- ループする効果音（変身の気のオーラ） --------------------
-//  <audio> の音量は 1.0 が上限で、この音源はそれでもまだ小さいので
-//  Web Audio でゲインを掛けて鳴らします。無音の頭出しと折り返し位置も
-//  Web Audio なら正確に指定できます。
+// ---- ループする効果音（Web Audio） --------------------------
 let actx = null;
-let auraBuf = null;
-let auraNode = null;
-let auraWanted = false;
+const loopBufs = new Map();   // src -> AudioBuffer
+const loopNodes = new Map();  // 名前 -> { src }
+const loopWanted = new Set(); // 鳴らしたい状態になっている名前
 
 function audioCtx() {
   if (actx) return actx;
@@ -119,50 +162,64 @@ function audioCtx() {
   return actx;
 }
 
-/** オーラの音をループ再生します（既に鳴っていれば何もしません） */
-export function startAuraLoop() {
+/** ループ音を鳴らし始めます（既に鳴っていれば何もしません） */
+export function startLoop(name) {
+  const spec = LOOP_SPECS[name];
   const ctx = audioCtx();
-  if (!ctx) return;
-  auraWanted = true;
-  if (auraNode) return; // すでに鳴っています
+  if (!spec || !ctx) return;
+  loopWanted.add(name);
+  if (loopNodes.has(name)) return;
 
   const begin = () => {
-    // 呼ばれてから読み込みが終わるまでの間に止められていたら鳴らしません
-    if (!auraWanted || auraNode || !auraBuf) return;
-    const src = ctx.createBufferSource();
-    src.buffer = auraBuf;
-    src.loop = true;
-    src.loopStart = Math.min(AURA_LOOP_START, auraBuf.duration - 0.1);
-    src.loopEnd = Math.min(AURA_LOOP_END, auraBuf.duration);
+    // 読み込みを待っている間に止められていたら鳴らしません
+    if (!loopWanted.has(name) || loopNodes.has(name)) return;
+    const buf = loopBufs.get(spec.src);
+    if (!buf) return;
+    const node = ctx.createBufferSource();
+    node.buffer = buf;
+    node.loop = true;
+    node.loopStart = Math.min(spec.loopStart, Math.max(0, buf.duration - 0.1));
+    node.loopEnd = buf.duration;
     const gain = ctx.createGain();
-    gain.gain.value = AURA_GAIN;
-    src.connect(gain).connect(ctx.destination);
-    src.start(0, src.loopStart); // 無音の頭出しを飛ばして鳴らし始めます
-    auraNode = { src, gain };
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(spec.gain, t);
+    if (spec.gainAfter != null) {
+      // 変身音のあとにオーラ音の音量を持ち上げます
+      gain.gain.setValueAtTime(spec.gain, t + (spec.rampAt || 0));
+      gain.gain.linearRampToValueAtTime(spec.gainAfter, t + (spec.rampAt || 0) + (spec.rampDur || 0.3));
+    }
+    node.connect(gain).connect(ctx.destination);
+    node.start(0, 0); // 1周目は先頭（変身の瞬間の音）から鳴らします
+    loopNodes.set(name, { src: node });
   };
 
   const run = () => {
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    if (auraBuf) { begin(); return; }
-    fetch(SE.aura)
+    if (loopBufs.has(spec.src)) { begin(); return; }
+    fetch(spec.src)
       .then((r) => r.arrayBuffer())
       .then((b) => ctx.decodeAudioData(b))
-      .then((buf) => { auraBuf = buf; begin(); })
+      .then((buf) => { loopBufs.set(spec.src, buf); begin(); })
       .catch(() => { /* 読めなくても進行は止めません */ });
   };
 
   run();
-  // 自動再生を止められている場合は、最初のタップでやり直します
-  if (!unlocked && pending.length < 4) pending.push(run);
+  if (!unlocked && pending.length < 6) pending.push(run);
 }
 
-/** オーラの音を止めます */
-export function stopAuraLoop() {
-  auraWanted = false;
-  if (!auraNode) return;
-  try { auraNode.src.stop(); } catch { /* 既に止まっている場合は無視 */ }
-  auraNode = null;
+/** ループ音を止めます */
+export function stopLoop(name) {
+  loopWanted.delete(name);
+  const n = loopNodes.get(name);
+  if (!n) return;
+  loopNodes.delete(name);
+  try { n.src.stop(); } catch { /* 既に止まっている場合は無視 */ }
 }
+
+export const startAuraLoop = () => startLoop("aura");
+export const stopAuraLoop = () => stopLoop("aura");
+export const startRouletteLoop = () => startLoop("rouletteSpin");
+export const stopRouletteLoop = () => stopLoop("rouletteSpin");
 
 // ---- BGM ---------------------------------------------------
 let bgmEl = null;

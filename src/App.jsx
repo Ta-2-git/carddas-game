@@ -3,7 +3,7 @@ import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
 import { has3DModel, MOTION, getMotionShotDelay, getMotionPlaySeconds, getPreloadUrls } from "./data/characters";
 import { preload } from "./three/gltfCache";
-import { BGM, SE, playBgm, playSe, preloadAudio, startAuraLoop, stopAuraLoop } from "./audio";
+import { BGM, SE, playBgm, playSe, preloadAudio, startAuraLoop, stopAuraLoop, startRouletteLoop, stopRouletteLoop } from "./audio";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -832,7 +832,7 @@ const SupportCardSelectScreen = ({ ownedSupports, onSelect, onSkip, onReselect }
       <div style={{ flex: 1, overflowY: "auto", padding: "0 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 12, justifyItems: "center", paddingBottom: 100 }}>
           {cards.map(card => (
-            <div key={card.id} onClick={() => setSelected(selected?.id === card.id ? null : card)} style={{ cursor: "pointer" }}>
+            <div key={card.id} data-se="click" onClick={() => setSelected(selected?.id === card.id ? null : card)} style={{ cursor: "pointer" }}>
               <div style={{ width: 130, height: 182, borderRadius: 10, background: `linear-gradient(160deg,${card.color}18,${card.color}08,#0a0010)`, border: `2px solid ${selected?.id === card.id ? card.color : card.color + "55"}`, boxShadow: selected?.id === card.id ? `0 0 20px ${card.color}, 0 0 40px ${card.color}66` : `0 0 10px ${card.color}33`, cursor: "pointer", position: "relative", overflow: "hidden", transition: "all 0.2s", transform: selected?.id === card.id ? "scale(1.06) translateY(-4px)" : "scale(1)", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 4px 6px", userSelect: "none" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, background: card.color, color: "#000", fontSize: 8, fontWeight: "900", textAlign: "center", padding: "2px 0", fontFamily: "'Courier New',monospace", letterSpacing: 1 }}>{card.rarity} — サポート</div>
                 <div style={{ marginTop: 16, flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -867,7 +867,7 @@ const EventCardSelectScreen = ({ ownedEvents, onSelect, onSkip, onReselect }) =>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 12, justifyItems: "center", paddingBottom: 100 }}>
           {cards.map(card => (
-            <div key={card.id} onClick={() => setSelected(selected?.id === card.id ? null : card)} style={{ cursor: "pointer" }}>
+            <div key={card.id} data-se="click" onClick={() => setSelected(selected?.id === card.id ? null : card)} style={{ cursor: "pointer" }}>
               <div style={{ width: 130, height: 182, borderRadius: 10, background: `linear-gradient(160deg,${card.color}18,${card.color}08,#000a10)`, border: `2px solid ${selected?.id === card.id ? card.color : card.color + "55"}`, boxShadow: selected?.id === card.id ? `0 0 20px ${card.color}, 0 0 40px ${card.color}66` : `0 0 10px ${card.color}33`, cursor: "pointer", position: "relative", overflow: "hidden", transition: "all 0.2s", transform: selected?.id === card.id ? "scale(1.06) translateY(-4px)" : "scale(1)", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 4px 6px", userSelect: "none" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, background: card.color, color: "#000", fontSize: 8, fontWeight: "900", textAlign: "center", padding: "2px 0", fontFamily: "'Courier New',monospace", letterSpacing: 1 }}>{card.rarity} — イベント</div>
                 <div style={{ marginTop: 16, flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -943,7 +943,7 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
               const isSelected = selected?.id === card.id;
               const isFuseCandidate = fuseCandidate?.id === card.id;
               return (
-                <div key={card.id} onClick={() => handleSelect(card)} style={{ cursor: "pointer", position: "relative" }}>
+                <div key={card.id} data-se="click" onClick={() => handleSelect(card)} style={{ cursor: "pointer", position: "relative" }}>
                   <CardDisplay card={card} selected={isSelected || isFuseCandidate} small={false} />
                   {isFuseCandidate && (<div style={{ position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", background: "#a78bfa", color: "#000", fontSize: 8, fontWeight: "900", padding: "1px 6px", borderRadius: 8, whiteSpace: "nowrap", boxShadow: "0 0 8px #a78bfa" }}>FUSION PAIR</div>)}
                   {card.canFuse && !isSelected && !isFuseCandidate && (<div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", background: "#a78bfa33", border: "1px solid #a78bfa66", color: "#a78bfa", fontSize: 7, fontWeight: "700", padding: "1px 5px", borderRadius: 6, whiteSpace: "nowrap" }}>⚡ FUSION</div>)}
@@ -1021,7 +1021,7 @@ const DragonBurstDecideScreen = ({ data }) => {
   );
 };
 
-const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) => {
+const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEventCard, onEnd }) => {
   // is3D … 3Dモデルとモーションを持つキャラ（悟空系は isGoku が同じ意味）
   const is3D = Boolean(playerCard.isGoku || playerCard.is3D);
   // 敵も3Dモデルを持つか（持つ場合は攻撃モーションを最後まで再生させます）
@@ -1184,12 +1184,26 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const barrierReadyRef = useRef(evEffect === "ki_barrier");
   // 発動時のカットイン（イベントカード共通の演出を使います）
   // 条件発動のカットインは進行を止めないので、タップを吸わないようにします
-  const cutInCard = useCallback(() => {
-    if (!eventCard) return;
+  const cutInCard = useCallback((card = null) => {
+    const c = card || eventCard;
+    if (!c) return;
+    setCutInEventCard(c);
     setCutInPassive(true);
     setShowEventCutIn(true);
     setEventCutInDone(null);
   }, [eventCard]);
+  // ---- 敵のイベントカード（自分と同じ4種類から1枚。効果も同じ内容）----
+  const enemyEv = enemyEventCard?.effect;
+  const enemyLoseStreakRef = useRef(0);   // 敵から見た連敗数（＝自分が勝った回数）
+  const enemySaiyanMulRef = useRef(1);    // サイヤ人の力によるATK倍率
+  const enemySaiyanUsedRef = useRef(false);
+  const [enemySaiyanActive, setEnemySaiyanActive] = useState(false);
+  const [enemyBarrierReady, setEnemyBarrierReady] = useState(enemyEv === "ki_barrier");
+  const enemyBarrierReadyRef = useRef(enemyEv === "ki_barrier");
+  const enemyRevivedRef = useRef(false);
+  // カットインに出すカード（自分の分と敵の分を使い分けます）
+  const [cutInEventCard, setCutInEventCard] = useState(null);
+
   const [roundPhase, setRoundPhase] = useState("done");
   const [showRoundNum, setShowRoundNum] = useState(1);
   const [roundFadeOut, setRoundFadeOut] = useState(false);
@@ -1241,6 +1255,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [showSupportInfo, setShowSupportInfo] = useState(false);
   const [zoomPlayerHp, setZoomPlayerHp] = useState(playerCard.hp);
   const [zoomPlayerAtk, setZoomPlayerAtk] = useState(playerCard.atk);
+  // 敵のアップ表示も0から数え上げるので、専用の表示値を持ちます
+  const [zoomEnemyHp, setZoomEnemyHp] = useState(0);
+  const [zoomEnemyAtk, setZoomEnemyAtk] = useState(0);
   const [zoomPlayerStatus, setZoomPlayerStatus] = useState("");
   // 変身モーションを見せるあいだは、アップ表示の暗幕を外して画面を明るくします
   const [zoomBright, setZoomBright] = useState(false);
@@ -1265,6 +1282,23 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   }, []);
   useEffect(() => () => { Object.values(numAnimRef.current).forEach(id => id && cancelAnimationFrame(id)); }, []);
 
+  /**
+   * バトル開始時のステータス表示。0から基礎値まで数え上げ、
+   * スカウターの音を鳴らします（カードによる上昇と同じ見せ方）。
+   */
+  const revealStats = useCallback((who) => {
+    playSe(SE.scouter);
+    if (who === "player") {
+      setZoomPlayerHp(0); setZoomPlayerAtk(0);
+      animateValue("zoomHp", 0, playerCard.hp, 900, setZoomPlayerHp);
+      animateValue("zoomAtk", 0, playerCard.atk, 900, setZoomPlayerAtk);
+    } else {
+      setZoomEnemyHp(0); setZoomEnemyAtk(0);
+      animateValue("zoomEHp", 0, enemyData.hp, 900, setZoomEnemyHp);
+      animateValue("zoomEAtk", 0, enemyData.atk, 900, setZoomEnemyAtk);
+    }
+  }, [animateValue, playerCard, enemyData]);
+
   // 変身モーションに合わせて画面を明るくします
   const flashForTransform = useCallback((ms) => {
     setZoomBright(true); setTransformFlash(true);
@@ -1286,7 +1320,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
     T(() => { setPlayerVisible(true); setEnterPhase("player_land"); }, 800);
     T(() => { setZoomTarget("player"); setShowZoomStats(false); }, 1400);
-    T(() => { setShowZoomStats(true); }, 1900);
+    T(() => { setShowZoomStats(true); revealStats("player"); }, 1900);
     if (supportCard) {
       T(() => { setShowSupportBanner(true); }, 3500);
       T(() => { setShowSupportBanner(false); setShowSupportInfo(true); }, 4400);
@@ -1300,6 +1334,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
           // 暗いままだと変身が見えないので、この間だけ画面を明るくします
           flashForTransform(ms + 300);
+          playSe(SE.scouter);
           animateValue("zoomAtk", playerCard.atk, kaiokenAtk, 900, setZoomPlayerAtk);
           T(() => { setZoomPlayerAnim("idle"); setPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300);
@@ -1319,6 +1354,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           const ssjAtk = Math.floor(playerCard.atk * 1.5); const ssjHp = Math.floor(playerCard.hp * 1.5);
           setPlayerHp(ssjHp); playerHpRef.current = ssjHp; setPlayerMaxHp(ssjHp); setPlayerCurrentAtk(ssjAtk);
           gotenksLevelRef.current = 1; setGotenksLevel(1);
+          playSe(SE.scouter);
           animateValue("dispHp", playerCard.hp, ssjHp, 900, setPlayerDisplayHp);
           animateValue("zoomHp", playerCard.hp, ssjHp, 900, setZoomPlayerHp);
           animateValue("zoomAtk", playerCard.atk, ssjAtk, 900, setZoomPlayerAtk);
@@ -1327,6 +1363,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         else if (startsWithBoost) {
           setPlayerHp(boostedHp); playerHpRef.current = boostedHp; setPlayerMaxHp(boostedHp); setPlayerCurrentAtk(boostedAtk);
           // HPバーとアップ表示の数値を、少しずつ増やして見せます
+          playSe(SE.scouter);
           animateValue("dispHp", playerCard.hp, boostedHp, 900, setPlayerDisplayHp);
           animateValue("zoomHp", playerCard.hp, boostedHp, 900, setZoomPlayerHp);
           animateValue("zoomAtk", playerCard.atk, boostedAtk, 900, setZoomPlayerAtk);
@@ -1338,13 +1375,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       T(() => { setZoomTarget(null); setShowZoomStats(false); }, 8000 + HOLD);
       T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500 + HOLD);
       T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 9100 + HOLD);
-      T(() => { setShowZoomStats(true); }, 9600 + HOLD);
+      T(() => { setShowZoomStats(true); revealStats("enemy"); }, 9600 + HOLD);
       T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 11100 + HOLD);
       T(() => { startRound1Sequence(); }, 11400 + HOLD);
     } else {
       T(() => { setZoomTarget(null); setShowZoomStats(false); setEnemyVisible(true); setEnterPhase("enemy_land"); }, 3200);
       T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 3800);
-      T(() => { setShowZoomStats(true); }, 4300);
+      T(() => { setShowZoomStats(true); revealStats("enemy"); }, 4300);
       T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 5800);
       T(() => { startRound1Sequence(); }, 6100);
     }
@@ -1372,17 +1409,20 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const rouletteCountdownRef = useRef(null);
 
   const stopAtkRoulette = useCallback(() => {
+    playSe(SE.rouletteStop);
     clearInterval(rouletteCountdownRef.current); setRouletteCountdown(0);
     setRouletteState(prev => { if (!prev || prev.atkStopped) return prev; clearInterval(atkTimerRef2.current); const res = prev.atkSlots[atkIdxRef.current]; return { ...prev, atkStopped: true, atkResult: res }; });
   }, []);
 
   const stopDefRoulette = useCallback(() => {
+    playSe(SE.rouletteStop);
     clearInterval(rouletteCountdownRef.current); setRouletteCountdown(0);
     setRouletteState(prev => { if (!prev || prev.defStopped) return prev; clearInterval(defTimerRef2.current); const res = prev.defSlots[defIdxRef.current]; return { ...prev, defStopped: true, defResult: res }; });
   }, []);
 
   useEffect(() => {
     if (!rouletteState || !rouletteState.atkStopped || !rouletteState.defStopped) return;
+    stopRouletteLoop(); // 両方止まったので回転音も止めます
     const t = setTimeout(() => {
       const { atkResult, defResult, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, attacker, isFirstWin, ss1Win, ss3Win } = rouletteState;
       const isSpecial = atkResult === "special";
@@ -1443,6 +1483,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const defSlots = buildGuardSlots(defLv);
     atkIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
     defIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
+    startRouletteLoop(); // 回転中の音を鳴らし始めます
     setRouletteState({ atkSlots, atkIdx: atkIdxRef.current, atkStopped: false, atkResult: null, defSlots, defIdx: defIdxRef.current, defStopped: false, defResult: null, attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win, ss3Win });
     clearInterval(atkTimerRef2.current);
     atkTimerRef2.current = setInterval(() => { atkIdxRef.current = (atkIdxRef.current + 1) % ROULETTE_TOTAL; setRouletteState(prev => prev && !prev.atkStopped ? { ...prev, atkIdx: atkIdxRef.current } : prev); }, 30);
@@ -1543,6 +1584,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const newAtk = Math.floor(baseAtk * SS1_ATK_MUL);
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
     // 数値は一瞬で切り替えず、少しずつ増やして見せます
+    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
     animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
     animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
@@ -1564,6 +1606,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
     setPlayerHp(newHp); playerHpRef.current = newHp;
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
+    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
   }, [isSS1Char, playerCard, animateValue]);
 
@@ -1594,6 +1637,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
     setPlayerHp(newHp); playerHpRef.current = newHp;
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
+    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
     animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
     animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
@@ -1635,6 +1679,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const from = playerHpRef.current;
     const to = Math.min(playerMaxHpRef.current, from + heal);
     setPlayerHp(to); playerHpRef.current = to;
+    playSe(SE.scouter);
     animateValue("dispHp", from, to, 900, setPlayerDisplayHp);
     const mul = eventCard?.atkMul || 2;
     const na = Math.floor(playerAtkRef.current * mul);
@@ -1674,6 +1719,52 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     return result;
   }, [eventCard, evEffect, applySaiyanPower, cutInCard]);
 
+  // ---- 敵のイベント「サイヤ人の力」 ----
+  const applyEnemySaiyanPower = useCallback(() => {
+    if (enemySaiyanUsedRef.current) return;
+    enemySaiyanUsedRef.current = true;
+    const heal = enemyEventCard?.healAmount || 1000;
+    const from = enemyHpRef.current;
+    const to = Math.min(enemyData.hp, from + heal);
+    setEnemyHp(to); enemyHpRef.current = to;
+    animateValue("eDispHp", from, to, 900, setEnemyDisplayHp);
+    enemySaiyanMulRef.current = enemyEventCard?.atkMul || 2;
+    setEnemySaiyanActive(true);
+    setBattleLog(l => [...l, `${enemyData.name}のサイヤ人の力！ HP${to - from}回復・ATK${enemySaiyanMulRef.current}倍！`]);
+    cutInCard(enemyEventCard);
+  }, [enemyEventCard, enemyData, animateValue, cutInCard]);
+
+  /** 敵が1回攻撃したらATKを元に戻します */
+  const revertEnemySaiyanPower = useCallback(() => {
+    if (enemySaiyanMulRef.current === 1) return;
+    enemySaiyanMulRef.current = 1;
+    setEnemySaiyanActive(false);
+    setBattleLog(l => [...l, `${enemyData.name}のATKが元に戻った。`]);
+  }, [enemyData]);
+
+  /**
+   * 敵側のイベントカードを、じゃんけんの結果に対して処理します。
+   * 自分の判定（applyLoseStreak）が終わった結果を受け取ります。
+   * 敵にとっての「負け」は、自分から見た "win" です。
+   */
+  const applyEnemyLoseStreak = useCallback((result) => {
+    if (!enemyEventCard) return result;
+    if (result === "lose") { enemyLoseStreakRef.current = 0; return result; }
+    if (result !== "win") return result;   // あいこは連敗数を変えません
+    enemyLoseStreakRef.current += 1;
+    const need = enemyEventCard.loseStreak || 0;
+    if (need > 0 && enemyLoseStreakRef.current >= need) {
+      if (enemyEv === "reverse_result") {
+        enemyLoseStreakRef.current = 0;
+        setBattleLog(l => [...l, `${enemyData.name}の戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
+        cutInCard(enemyEventCard);
+        return "lose";
+      }
+      if (enemyEv === "saiyan_power") applyEnemySaiyanPower();
+    }
+    return result;
+  }, [enemyEventCard, enemyEv, enemyData, applyEnemySaiyanPower, cutInCard]);
+
   const handleDragonBurstResult = useCallback((result, hand, eHand) => {
     const currentMultiplier = dragonBurstMultiplierRef.current;
     const basePlayerAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : playerCurrentAtk;
@@ -1684,7 +1775,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setBattleLog(l => [...l, `ドラゴンバースト継続！ ATK×${newMult.toFixed(1)}`]);
       setPlayerHand(null); setEnemyHand(null); setJankenResult(null); setJankenResultLabel(null); setPhase("attack"); setTimerActive(false);
       if (newMult >= 2.0) {
-        const playerTotalAtk = playerEffAtk; const enemyTotalAtk = Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul());
+        const playerTotalAtk = playerEffAtk; const enemyTotalAtk = Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul() * enemySaiyanMulRef.current);
         const forcedAttacker = playerTotalAtk >= enemyTotalAtk ? "player" : "enemy";
         const forcedHand = forcedAttacker === "player" ? hand : eHand; const forcedEHand = forcedAttacker === "player" ? eHand : hand;
         const moveId = forcedAttacker === "player" ? playerCard[forcedHand] : enemyData[forcedEHand];
@@ -1710,7 +1801,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const attacker = result === "win" ? "player" : "enemy";
     const moveId = attacker === "player" ? playerCard[hand] : enemyData[eHand];
     const move = MOVES[moveId];
-    const baseAtk = attacker === "player" ? Math.floor(playerEffAtk * currentMultiplier) : Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul() * currentMultiplier);
+    const baseAtk = attacker === "player" ? Math.floor(playerEffAtk * currentMultiplier) : Math.floor((enemyData.atk + (atkBonus?.enemy || 0)) * enemyKiMul() * enemySaiyanMulRef.current * currentMultiplier);
     if (isGotenks && attacker === "player") applyGotenksTransform();
     // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
     const dbSS1Win = isSS1Char && attacker === "player" && !ss1ActiveRef.current;
@@ -1726,12 +1817,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   handleDragonBurstResultRef.current = handleDragonBurstResult;
 
   const handleHandSelect = useCallback((hand) => {
+    playSe(SE.cancel);
     if (dragonBurstPhase === "janken") {
       clearInterval(timerRef.current); setTimerActive(false); setPlayerHand(hand); setShowSet(true); setPhase("waiting_enemy");
       setTimeout(() => {
         const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
-        const result = applyLoseStreak(judgeJanken(hand, eHand));
+        const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
         if (result === "win" || result === "lose") addKi(result === "lose");
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
         setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, 1500);
@@ -1744,7 +1836,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       const eHand = drawEnemyHand();
       setEnemyHand(eHand); setShowSet(false);
       // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
-      const result = applyLoseStreak(judgeJanken(hand, eHand));
+      const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
       // 勝敗が決まった瞬間に気力ゲージを増やします。
       // ここで10メモリに達すれば、このターンの攻撃から2倍になります。
       if (result === "win" || result === "lose") addKi(result === "lose");
@@ -1760,7 +1852,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       const gotenksEffAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
       const rawPlayerAtk = isGotenks ? gotenksEffAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
       const effectivePlayerAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? rawPlayerAtk * 1.5 : rawPlayerAtk) * kiMul());
-      const baseAtk = attacker === "player" ? effectivePlayerAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul());
+      const baseAtk = attacker === "player" ? effectivePlayerAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul() * enemySaiyanMulRef.current);
       setCurrentMove(pendingMove);
       const isFirstWin = result === "win" && usesKaioken && kaiokenUnlockedRef.current && !kaiokenActiveRef.current;
       // GokuSS1 は「じゃんけんに勝ったら変身」
@@ -1772,12 +1864,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const latestGotenksAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
         const latestRawAtk = isGotenks ? latestGotenksAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
         const latestEffAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? latestRawAtk * 1.5 : latestRawAtk) * kiMul());
-        const latestBaseAtk = attacker === "player" ? latestEffAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul());
+        const latestBaseAtk = attacker === "player" ? latestEffAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul() * enemySaiyanMulRef.current);
         setJankenResultLabel(null); setPhase("attack");
         startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win, ss3Win);
       }, 450);
     }, 600);
-  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak, nextSS3Level]);
+  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak, applyEnemyLoseStreak, nextSS3Level]);
 
   const drainHp = useCallback((target, fromHp, toHp, onDone) => {
     const dmg = fromHp - toHp;
@@ -1794,7 +1886,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (gaveUpRef.current) return;
     gaveUpRef.current = true;
     clearInterval(timerRef.current); setTimerActive(false);
-    stopAuraLoop();
+    stopAuraLoop(); stopRouletteLoop();
     setBattleLog(l => [...l, `あきらめた…`]);
     setPhase("result");
     setPlayerHp(0); playerHpRef.current = 0; setPlayerDisplayHp(0);
@@ -1837,10 +1929,18 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         setBattleLog(l => [...l, `気のバリア！ ${dmg}ダメージを無効化した！`]);
         cutInCard();
       }
+      // 敵側の「気のバリア」
+      if (hitTarget === "enemy" && enemyBarrierReadyRef.current && dmg >= (enemyEventCard?.threshold || 800)) {
+        enemyBarrierReadyRef.current = false; setEnemyBarrierReady(false);
+        dealt = 0; blocked = true;
+        setBattleLog(l => [...l, `${enemyData.name}の気のバリア！ ${dmg}ダメージを無効化した！`]);
+        cutInCard(enemyEventCard);
+      }
       const newHp = Math.max(0, fromHp - dealt);
       setDmgText({ amount: dealt, target: hitTarget, blocked });
       // サポート「サイヤ人の力」: 一度攻撃したらATKは元に戻ります
       if (attacker === "player") setTimeout(() => revertSaiyanPower(), 1200);
+      else setTimeout(() => revertEnemySaiyanPower(), 1200);
       // 気力ゲージは1回の攻撃で使い切ります
       setTimeout(() => consumeKi(attacker), 1200);
       setTimeout(() => {
@@ -1854,11 +1954,24 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         }
         drainHp(hitTarget, fromHp, newHp, () => {
           if (newHp <= 0) {
-            if (hitTarget === "enemy") { setPlayerAnim("win"); setEnemyAnim("lose"); setTimeout(() => onEnd(true), 1500); setPhase("result"); }
+            if (hitTarget === "enemy") {
+              // 敵の「ナメック星人の力」: 5ターン以内なら1度だけ半分回復して立て直します
+              const eCanRevive = enemyEv === "revive_half" && !enemyRevivedRef.current && turn <= 5;
+              if (eCanRevive) {
+                enemyRevivedRef.current = true;
+                const reviveHp = Math.floor(enemyData.hp / 2);
+                setEnemyHp(reviveHp); enemyHpRef.current = reviveHp; setEnemyDisplayHp(reviveHp);
+                setBattleLog(l => [...l, `${enemyData.name}のナメック星人の力発動！ HP ${reviveHp} 回復！`]);
+                cutInCard(enemyEventCard);
+                setPlayerAnim("idle"); setEnemyAnim("idle");
+                setDamageNum(null); setCurrentMove(null);
+                nextTurn(isKaioken, turn + 1, hitTarget === "player");
+              } else { setPlayerAnim("win"); setEnemyAnim("lose"); setTimeout(() => onEnd(true), 1500); setPhase("result"); }
+            }
             else {
               const canRevive = eventCard?.effect === "revive_half" && !eventCardUsedRef.current && turn <= 5;
               if (canRevive) {
-                eventCardUsedRef.current = true; setShowEventCutIn(true);
+                eventCardUsedRef.current = true; setCutInEventCard(eventCard); setShowEventCutIn(true);
                 setEventCutInDone(() => () => {
                   const reviveHp = Math.floor(playerCard.hp / 2);
                   setPlayerHp(reviveHp); playerHpRef.current = reviveHp; setPlayerDisplayHp(reviveHp);
@@ -2004,7 +2117,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
   return (
     <div style={{ minHeight: "100vh", background: BATTLE_BG ? `url(${BATTLE_BG}) center bottom / cover` : "linear-gradient(180deg,#0a1628,#1a2a4a)", fontFamily: "monospace", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-      {showEventCutIn && eventCard && (<CardCutIn card={eventCard} cardType="event" passive={cutInPassive} onDone={() => { setShowEventCutIn(false); setCutInPassive(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
+      {showEventCutIn && (cutInEventCard || eventCard) && (<CardCutIn card={cutInEventCard || eventCard} cardType="event" passive={cutInPassive} onDone={() => { setShowEventCutIn(false); setCutInPassive(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
 
       <div style={{ padding: "10px 14px 8px", position: "relative", zIndex: 2, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, alignItems: "center" }}>
@@ -2035,6 +2148,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           <div />
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {enemyData.atk + atkBonus.enemy}</div>
+            {enemySaiyanActive && (<div style={{ ...BADGE, color: "#fb923c", background: "rgba(251,146,60,0.18)", border: "1px solid rgba(251,146,60,0.55)", animation: "pulse 0.6s infinite" }}>ATK×2🔥</div>)}
+            {enemyBarrierReady && (<div style={{ ...BADGE, color: "#67e8f9", background: "rgba(103,232,249,0.14)", border: "1px solid rgba(103,232,249,0.5)" }}>気のバリア🛡️</div>)}
             {/* 押すとその場で敗北になります（誤爆しないよう小さめに置いています） */}
             <button onClick={giveUp} disabled={phase === "result"}
               style={{ ...BADGE, color: "#9ca3af", background: "rgba(0,0,0,0.45)", border: "1px solid #4b5563", cursor: phase === "result" ? "default" : "pointer", fontFamily: "monospace", opacity: phase === "result" ? 0.4 : 1 }}>あきらめる</button>
@@ -2061,8 +2176,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             {showZoomStats && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: "scouterStatIn 0.4s ease both", marginLeft: 34, background: "rgba(0,0,0,0.55)", border: `1px solid ${accent}66`, borderRadius: 8, padding: "12px 16px", backdropFilter: "blur(2px)" }}>
                 <div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 19, color: "#fff", textShadow: `0 0 12px ${accent}`, letterSpacing: 2, marginBottom: 2, borderLeft: `4px solid ${accent}`, paddingLeft: 10 }}>{zoomTarget === "player" ? playerCard.name : enemyData.name}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#4ade80cc", letterSpacing: 3, fontWeight: "700" }}>HP</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#4ade80", textShadow: "0 0 14px #4ade80", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerHp : enemyData.hp}</div></div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#f87171cc", letterSpacing: 3, fontWeight: "700" }}>ATK</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#f87171", textShadow: "0 0 14px #ef4444", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerAtk : enemyData.atk}</div></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#4ade80cc", letterSpacing: 3, fontWeight: "700" }}>HP</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#4ade80", textShadow: "0 0 14px #4ade80", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerHp : zoomEnemyHp}</div></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={{ fontFamily: "monospace", fontSize: 13, color: "#f87171cc", letterSpacing: 3, fontWeight: "700" }}>ATK</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 38, color: "#f87171", textShadow: "0 0 14px #ef4444", letterSpacing: 1, lineHeight: 1 }}>{zoomTarget === "player" ? zoomPlayerAtk : zoomEnemyAtk}</div></div>
                 {zoomTarget === "player" && zoomPlayerStatus && (<div style={{ fontFamily: "monospace", fontWeight: "900", fontSize: 15, color: "#ff4400", background: "rgba(255,68,0,0.15)", border: "1px solid rgba(255,68,0,0.5)", borderRadius: 4, padding: "5px 10px", textShadow: "0 0 8px #ff4400", animation: "pulse 0.6s infinite", textAlign: "center" }}>{zoomPlayerStatus}</div>)}
               </div>
             )}
@@ -2359,7 +2474,7 @@ export default function App() {
   // （カード選択で選んだ瞬間にキャラが動き出すようにするため）
   useEffect(() => { preload(getPreloadUrls()); }, []);
   // 効果音も先に取っておきます（鳴らす瞬間に間に合わせるため）
-  useEffect(() => { preloadAudio([SE.melee, SE.ultimate, SE.kiBlast, SE.aura, SE.dragonBurst]); }, []);
+  useEffect(() => { preloadAudio([SE.melee, SE.ultimate, SE.kiBlast, SE.dragonBurst, SE.scouter, SE.cursor, SE.cancel, SE.rouletteStop]); }, []);
 
   const [screen, setScreen] = useState("title");
   const [coins, setCoins] = useState(500);
@@ -2373,8 +2488,21 @@ export default function App() {
   const [ownedEvents] = useState(INITIAL_EVENT);
   const [selectedSupport, setSelectedSupport] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [enemyEventCard, setEnemyEventCard] = useState(null);
   const [cutInCard, setCutInCard] = useState(null);
   const [cutInAfter, setCutInAfter] = useState(null);
+
+  // カード選択・メニュー操作のクリック音。
+  // ボタンとカードだけを対象にし、バトル中は専用のSEがあるので鳴らしません。
+  useEffect(() => {
+    if (screen === "battle") return;
+    const onDown = (e) => {
+      const t = e.target;
+      if (t && t.closest && t.closest('button,[data-se="click"]')) playSe(SE.cursor);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [screen]);
 
   // 画面に合わせてBGMを切り替えます。(App)
   // ロビー曲はカード選択まで。VS画面に入ったらバトル曲に切り替わります。
@@ -2383,7 +2511,7 @@ export default function App() {
     playBgm(battleScreens.includes(screen) ? BGM.battle : BGM.lobby);
   }, [screen]);
   // バトル以外ではオーラの音を止めます（変身したまま画面を抜けた場合の保険）
-  useEffect(() => { if (screen !== "battle") stopAuraLoop(); }, [screen]);
+  useEffect(() => { if (screen !== "battle") { stopAuraLoop(); stopRouletteLoop(); } }, [screen]);
 
   const handleCoinInsert = () => {
     setCoins(c => c - 100);
@@ -2413,6 +2541,8 @@ export default function App() {
   const handleCharCardSelect = (card) => {
     const fixed = DEFAULT_ENEMY_ID ? ENEMIES.find(e => e.id === DEFAULT_ENEMY_ID) : null;
     setSelectedCard(card);
+    // 敵もイベントカードを1枚ランダムに使います（サポートカードは使いません）
+    setEnemyEventCard(EVENT_CARDS[Math.floor(Math.random() * EVENT_CARDS.length)]);
     setBattleEnemy(fixed || ENEMIES[Math.floor(Math.random() * ENEMIES.length)]);
     setScreen("support_select");
   };
@@ -2478,7 +2608,7 @@ export default function App() {
       {screen === "support_select" && (<SupportCardSelectScreen ownedSupports={ownedSupports} onSelect={handleSupportSelect} onSkip={handleSupportSelect} onReselect={() => { setSelectedCard(null); setBattleEnemy(null); setScreen("select"); }} />)}
       {screen === "event_select" && (<EventCardSelectScreen ownedEvents={ownedEvents} onSelect={handleEventSelect} onSkip={handleEventSelect} onReselect={() => { setSelectedSupport(null); setScreen("support_select"); }} />)}
       {screen === "vs" && selectedCard && battleEnemy && (<VSCutScreen playerCard={selectedCard} enemyData={battleEnemy} onDone={() => setScreen("battle")} />)}
-      {screen === "battle" && selectedCard && battleEnemy && (<BattleScreen playerCard={selectedCard} enemyData={battleEnemy} supportCard={selectedSupport} eventCard={selectedEvent} onEnd={won => { if (won) setCoins(c => c + 150); setBattleResult(won); setTimeout(() => setScreen("result"), 500); }} />)}
+      {screen === "battle" && selectedCard && battleEnemy && (<BattleScreen playerCard={selectedCard} enemyData={battleEnemy} supportCard={selectedSupport} eventCard={selectedEvent} enemyEventCard={enemyEventCard} onEnd={won => { if (won) setCoins(c => c + 150); setBattleResult(won); setTimeout(() => setScreen("result"), 500); }} />)}
       {screen === "result" && selectedCard && battleEnemy && (<ResultScreen won={battleResult} playerCard={selectedCard} enemy={battleEnemy} onHome={() => { setBattleResult(null); setSelectedCard(null); setSelectedSupport(null); setSelectedEvent(null); setScreen("title"); }} />)}
       {screen === "owned" && <OwnedCardsScreen ownedCards={ownedCards} onBack={() => setScreen("title")} />}
     </>
