@@ -136,19 +136,28 @@ export function createKiAura(THREE, opts = {}) {
   // 飽和して姿が見えなくなります。実測（道着の色 217,99,26 で計測）:
   //   霞0.30 + 稲妻0.85 → キャラ部分が (255,156,63)＝赤が振り切れて白飛び
   //   霞0.13 + 稲妻0.28 → キャラ部分が (244,123,42)＝光は乗るが姿は見える
+  // 強さは characters.js から上書きできます（スーパーサイヤ人3を濃くするため）
+  const backI = opts.backIntensity != null ? opts.backIntensity : 0.85;
+  const frontI = opts.frontIntensity != null ? opts.frontIntensity : 0.13;
+  const boltI = opts.boltIntensity != null ? opts.boltIntensity : 0.28;
+
   // 背面：オーラ本体（キャラの後ろに置くのでキャラが手前に立って見えます）
   addLayer(AURA_SHEET, width, height, -0.30,
-    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 0.85 }));
+    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: backI }));
 
   // 前面：薄い霞（キャラの上に光が乗り、包まれて見えます）
   addLayer(AURA_SHEET, width, height, 0.32,
-    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: 0.13 }));
+    makeMaterial(THREE, AURA_SHEET, { color, opacity, intensity: frontI }));
 
-  // 稲妻（任意）
+  // 稲妻（任意）。boltLayers を増やすと位相のずれた稲妻が重なって密度が上がります
   if (opts.thunder) {
     const th = height * 0.92;
-    addLayer(THUNDER_SHEET, th * THUNDER_SHEET.aspect, th, 0.36,
-      makeMaterial(THREE, THUNDER_SHEET, { color: boltColor, opacity, intensity: 0.28 }));
+    const layers = Math.max(1, opts.boltLayers || 1);
+    for (let i = 0; i < layers; i++) {
+      addLayer(THUNDER_SHEET, th * THUNDER_SHEET.aspect * (i === 0 ? 1 : 0.8), th * (i === 0 ? 1 : 0.8),
+        i === 0 ? 0.36 : -0.26,
+        makeMaterial(THREE, THUNDER_SHEET, { color: boltColor, opacity, intensity: i === 0 ? boltI : boltI * 1.6 }));
+    }
   }
 
   group.userData.tick = (dt) => {

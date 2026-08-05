@@ -213,7 +213,18 @@ export const CHARACTERS = {
     name: "GokuSS3",
     transformedModel:  `${R2}/goku_ssj.glb`,
     transformedModel2: `${R2}/goku_ssj3.glb`,
-    aura: GOKU_AURA(AURA_PRESETS.gold),
+    aura: {
+      ...GOKU_AURA(AURA_PRESETS.gold),
+      // 第2段階（スーパーサイヤ人3）は一回り大きく、濃く、稲妻を強くします
+      transformed2: {
+        enabled: true, ...AURA_PRESETS.gold,
+        scale: 1.5, opacity: 0.95, yOffset: 0, startFrame: 40, thunder: true,
+        backIntensity: 1.15,   // 既定0.85
+        frontIntensity: 0.16,  // 既定0.13（上げすぎるとキャラが白飛びします）
+        boltIntensity: 0.5,    // 既定0.28
+        boltLayers: 2,         // 位相のずれた稲妻を重ねて密度を上げる
+      },
+    },
     ultimate: {
       ...GOKU_BASE.ultimate,
       video: "/kamehameha_super.mp4",

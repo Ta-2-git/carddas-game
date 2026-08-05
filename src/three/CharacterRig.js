@@ -524,7 +524,7 @@ export default class CharacterRig {
   //  オーラ
   // ---------------------------------------------------------
   async _loadAuras() {
-    const modes = ["normal", "transformed", "reverted"];
+    const modes = ["normal", "transformed", "transformed2", "reverted"];
     for (const mode of modes) {
       const a = (this.config.aura || {})[mode];
       if (!a || !a.enabled) continue;
@@ -546,6 +546,11 @@ export default class CharacterRig {
           boltColor: a.boltColor,
           opacity: a.opacity != null ? a.opacity : 0.9,
           thunder: Boolean(a.thunder),
+          // 段階ごとに濃さ・稲妻の強さを変えられます
+          backIntensity: a.backIntensity,
+          frontIntensity: a.frontIntensity,
+          boltIntensity: a.boltIntensity,
+          boltLayers: a.boltLayers,
           // オーラは腰の位置を基準に置き、体と一緒に動くようにします
           anchorY: this._hipsRestY != null ? this._hipsRestY : 0.8,
         });
@@ -621,6 +626,13 @@ export default class CharacterRig {
     // 到達したら」同時に切り替えます（update 内で処理）
   }
 
+  /** 今の変身段階で表示すべきオーラの種類を返します */
+  _wantedAuraMode() {
+    const lv = this.transformLevel || 0;
+    if (lv >= 2 && this.auraMeshes.transformed2) return "transformed2";
+    return "transformed";
+  }
+
   /** 今の変身段階で表示すべきモデルの種類を返します */
   _wantedVariant() {
     const lv = this.transformLevel || 0;
@@ -663,18 +675,19 @@ export default class CharacterRig {
         const startSec = (t.startFrame || 0) / fps;
         // 段階が上がるとき（1→2）は auraMode が既に transformed のままなので、
         // 表示すべきモデルが変わったかどうかも見て切り替えます。
+        const wantAura = this._wantedAuraMode();
         const needSwap = this._activeKey !== this._wantedVariant();
-        if (this.transformElapsed >= startSec && (this.auraMode !== "transformed" || needSwap)) {
+        if (this.transformElapsed >= startSec && (this.auraMode !== wantAura || needSwap)) {
           this.transformed = true;
-          this.auraMode = "transformed";
+          this.auraMode = wantAura;
           this._applyAuraVisibility();
           this._applyModelForState(); // 気が爆発する瞬間にモデルも入れ替える
         }
       }
-    } else if (this.transformed && this.auraMode !== "transformed" && this.auraMeshes.transformed) {
+    } else if (this.transformed && this.auraMode !== this._wantedAuraMode() && this.auraMeshes.transformed) {
       // 変身モーションを再生していない（既に別のモーションへ移った / 用意が無い）場合は
       // 変身状態である限りオーラを出し続けます
-      this.auraMode = "transformed";
+      this.auraMode = this._wantedAuraMode();
       this._applyAuraVisibility();
       this._applyModelForState();
     }
