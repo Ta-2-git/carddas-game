@@ -149,18 +149,18 @@ const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009", "c010"];
 const SUPPORT_CARDS = [
   { id: "s001", name: "怒り", rarity: "SR", color: "#ef4444", glow: "#dc2626", description: "1段階変身した状態でバトル開始。孫悟空は界王拳状態からスタート。", timing: "battle_start", effect: "transform_start", illustSymbol: "🔥" },
   { id: "s002", name: "潜在能力の解放", rarity: "SR", color: "#a78bfa", glow: "#7c3aed", description: "HPが300、ATKが100上昇する。（永続）", timing: "battle_start", effect: "boost_stats", hpBoost: 300, atkBoost: 100, illustSymbol: "⚡" },
-  // ここから下は、バトル開始時ではなく条件を満たしたときに発動します
-  { id: "s003", name: "サイヤ人の力", rarity: "SR", color: "#fb923c", glow: "#ea580c", description: "じゃんけんに3回連続で負けた時、HPが1000回復しATKが2倍になる。（1回限り／攻撃すると元に戻る）", timing: "on_lose_streak", effect: "saiyan_power", loseStreak: 3, healAmount: 1000, atkMul: 2, illustSymbol: "💢" },
-  { id: "s004", name: "戦いのセンス", rarity: "SR", color: "#4ade80", glow: "#16a34a", description: "じゃんけんに2回連続で負けた時、じゃんけんの勝敗が逆転する。", timing: "on_lose_streak", effect: "reverse_result", loseStreak: 2, illustSymbol: "👁️" },
-  { id: "s005", name: "気のバリア", rarity: "SR", color: "#67e8f9", glow: "#0891b2", description: "800ダメージ以上の攻撃を無効化する。（1回限り）", timing: "on_damage", effect: "ki_barrier", threshold: 800, illustSymbol: "🛡️" },
 ];
 
+// イベントカード … 条件を満たした瞬間にカットインが入って発動します
 const EVENT_CARDS = [
   { id: "e001", name: "ナメック星人の力", rarity: "SSR", color: "#22d3ee", glow: "#0891b2", description: "5ターン以内に自分の体力が0になった時、体力を半分回復する。(1回限り)", timing: "on_ko", condition: "turn_lte_5", effect: "revive_half", illustSymbol: "💧" },
+  { id: "e002", name: "サイヤ人の力", rarity: "SR", color: "#fb923c", glow: "#ea580c", description: "じゃんけんに3回連続で負けた時、HPが1000回復しATKが2倍になる。（1回限り／攻撃すると元に戻る）", timing: "on_lose_streak", effect: "saiyan_power", loseStreak: 3, healAmount: 1000, atkMul: 2, illustSymbol: "💢" },
+  { id: "e003", name: "戦いのセンス", rarity: "SR", color: "#4ade80", glow: "#16a34a", description: "じゃんけんに2回連続で負けた時、じゃんけんの勝敗が逆転する。", timing: "on_lose_streak", effect: "reverse_result", loseStreak: 2, illustSymbol: "👁️" },
+  { id: "e004", name: "気のバリア", rarity: "SR", color: "#67e8f9", glow: "#0891b2", description: "800ダメージ以上の攻撃を無効化する。（1回限り）", timing: "on_damage", effect: "ki_barrier", threshold: 800, illustSymbol: "🛡️" },
 ];
 
-const INITIAL_SUPPORT = ["s001", "s002", "s003", "s004", "s005"];
-const INITIAL_EVENT   = ["e001"];
+const INITIAL_SUPPORT = ["s001", "s002"];
+const INITIAL_EVENT   = ["e001", "e002", "e003", "e004"];
 const HANDS = ["rock", "scissors", "paper"];
 const HAND_EMOJI = { rock: "✊", scissors: "✌️", paper: "🖐️" };
 
@@ -951,11 +951,13 @@ const DragonBurstDecideScreen = ({ data }) => {
 };
 
 const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) => {
-  const usesKaioken = Boolean(playerCard.isGoku) && !playerCard.isGokuSS1;
+  // 界王拳を使うのは No.001 孫悟空だけ。SS1/SS3 は変身するので界王拳にしません
+  const usesKaioken = Boolean(playerCard.isGoku) && !playerCard.isGokuSS1 && !playerCard.isGokuSS3;
   const startsWithKaioken = supportCard?.effect === "transform_start" && usesKaioken;
   const startsWithSSJ = supportCard?.effect === "transform_start" && playerCard.isGotenks;
-  // GokuSS1 も「怒り」でスーパーサイヤ人スタートにします
+  // GokuSS1 / GokuSS3 も「怒り」でスーパーサイヤ人スタートにします
   const startsWithSS1 = supportCard?.effect === "transform_start" && playerCard.isGokuSS1;
+  const startsWithSS3 = supportCard?.effect === "transform_start" && playerCard.isGokuSS3;
   const startsWithBoost = supportCard?.effect === "boost_stats";
   const boostedHp = startsWithBoost ? playerCard.hp + (supportCard.hpBoost || 0) : playerCard.hp;
   const boostedAtk = startsWithBoost ? playerCard.atk + (supportCard.atkBoost || 0) : playerCard.atk;
@@ -1034,21 +1036,20 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const ss3BaseMaxHpRef = useRef(null);  // 変身前（素）の最大HPとATK
   const ss3BaseAtkRef = useRef(null);
 
-  // ---- 条件で発動するサポートカード ----
-  const supEffect = supportCard?.effect;
+  // ---- 条件で発動するイベントカード ----
+  const evEffect = eventCard?.effect;
   const loseStreakRef = useRef(0);              // じゃんけんの連敗数
   const [saiyanPowerActive, setSaiyanPowerActive] = useState(false);
   const saiyanPowerActiveRef = useRef(false);
   const saiyanUsedRef = useRef(false);
-  const [barrierReady, setBarrierReady] = useState(supEffect === "ki_barrier");
-  const barrierReadyRef = useRef(supEffect === "ki_barrier");
-  // カード発動を知らせる小さな表示
-  const [cardPopup, setCardPopup] = useState(null);
-  const popCard = useCallback((card, text) => {
-    if (!card) return;
-    setCardPopup({ key: Date.now(), card, text });
-    setTimeout(() => setCardPopup(null), 1900);
-  }, []);
+  const [barrierReady, setBarrierReady] = useState(evEffect === "ki_barrier");
+  const barrierReadyRef = useRef(evEffect === "ki_barrier");
+  // 発動時のカットイン（イベントカード共通の演出を使います）
+  const cutInCard = useCallback(() => {
+    if (!eventCard) return;
+    setShowEventCutIn(true);
+    setEventCutInDone(null);
+  }, [eventCard]);
   const [roundPhase, setRoundPhase] = useState("done");
   const [showRoundNum, setShowRoundNum] = useState(1);
   const [roundFadeOut, setRoundFadeOut] = useState(false);
@@ -1062,6 +1063,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const playerAttackCountRef = useRef(0);
   // 「腕を伸ばしきったら弾を出す」ための予約
   const pendingShotRef = useRef(null);
+  // テストしやすいよう、最初の2回のじゃんけんは敵が必ずチョキを出します
+  const jankenCountRef = useRef(0);
+  const drawEnemyHand = useCallback(() => {
+    jankenCountRef.current += 1;
+    if (jankenCountRef.current <= 2) return "scissors";
+    return HANDS[Math.floor(Math.random() * 3)];
+  }, []);
   const [dragonBurstPhase, setDragonBurstPhase] = useState(null);
   const [dragonBurstMultiplier, setDragonBurstMultiplier] = useState(1);
   const dragonBurstMultiplierRef = useRef(1);
@@ -1156,12 +1164,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           T(() => { setZoomPlayerAnim("idle"); setPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("界王拳🔥"), 300);
         }
-        else if (startsWithSS1) {
-          // GokuSS1 は最初からスーパーサイヤ人でスタートします
+        else if (startsWithSS1 || startsWithSS3) {
+          // GokuSS1 / GokuSS3 は最初からスーパーサイヤ人でスタートします
           const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
           setZoomPlayerAnim(MOTION.TRANSFORM);
           flashForTransform(ms + 300);
-          applySS1Transform();
+          if (startsWithSS3) applySS3Level(1); else applySS1Transform();
           T(() => { setZoomPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300);
         }
@@ -1184,7 +1192,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         }
       }, 6800);
       // ステータスが変わるカードのときは、上がった後の数値をしばらく見せます
-      const HOLD = (startsWithKaioken || startsWithSS1 || startsWithSSJ || startsWithBoost) ? 2000 : 0;
+      const HOLD = (startsWithKaioken || startsWithSS1 || startsWithSS3 || startsWithSSJ || startsWithBoost) ? 2000 : 0;
       T(() => { setZoomTarget(null); setShowZoomStats(false); }, 8000 + HOLD);
       T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500 + HOLD);
       T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 9100 + HOLD);
@@ -1446,53 +1454,53 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     return 0;
   }, [isSS3Char]);
 
-  // ---- サポート「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
+  // ---- イベント「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
   const applySaiyanPower = useCallback(() => {
     if (saiyanUsedRef.current) return;
     saiyanUsedRef.current = true;
     saiyanPowerActiveRef.current = true; setSaiyanPowerActive(true);
-    const heal = supportCard?.healAmount || 1000;
+    const heal = eventCard?.healAmount || 1000;
     const from = playerHpRef.current;
     const to = Math.min(playerMaxHpRef.current, from + heal);
     setPlayerHp(to); playerHpRef.current = to;
     animateValue("dispHp", from, to, 900, setPlayerDisplayHp);
-    const mul = supportCard?.atkMul || 2;
+    const mul = eventCard?.atkMul || 2;
     const na = Math.floor(playerAtkRef.current * mul);
     setPlayerCurrentAtk(na); playerAtkRef.current = na;
     setBattleLog(l => [...l, `サイヤ人の力！ HP${to - from}回復・ATK${mul}倍！`]);
-    popCard(supportCard, `HP+${to - from} / ATK×${mul}`);
-  }, [supportCard, animateValue, popCard]);
+    cutInCard();
+  }, [eventCard, animateValue, cutInCard]);
 
   // 攻撃を1回行ったらATKを元に戻します
   const revertSaiyanPower = useCallback(() => {
     if (!saiyanPowerActiveRef.current) return;
     saiyanPowerActiveRef.current = false; setSaiyanPowerActive(false);
-    const mul = supportCard?.atkMul || 2;
+    const mul = eventCard?.atkMul || 2;
     const back = Math.max(1, Math.floor(playerAtkRef.current / mul));
     setPlayerCurrentAtk(back); playerAtkRef.current = back;
     setBattleLog(l => [...l, `ATKが元に戻った。`]);
-  }, [supportCard]);
+  }, [eventCard]);
 
   /**
-   * じゃんけんの結果を受けて、連敗で発動するサポートカードを処理します。
+   * じゃんけんの結果を受けて、連敗で発動するイベントカードを処理します。
    * 「戦いのセンス」で逆転した場合は逆転後の結果を返します。
    */
   const applyLoseStreak = useCallback((result) => {
     if (result === "win") { loseStreakRef.current = 0; return result; }
     if (result !== "lose") return result;   // あいこは連敗数を変えません
     loseStreakRef.current += 1;
-    const need = supportCard?.loseStreak || 0;
+    const need = eventCard?.loseStreak || 0;
     if (need > 0 && loseStreakRef.current >= need) {
-      if (supEffect === "reverse_result") {
+      if (evEffect === "reverse_result") {
         loseStreakRef.current = 0;
         setBattleLog(l => [...l, `戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
-        popCard(supportCard, "勝敗 逆転！");
+        cutInCard();
         return "win";
       }
-      if (supEffect === "saiyan_power") applySaiyanPower();
+      if (evEffect === "saiyan_power") applySaiyanPower();
     }
     return result;
-  }, [supportCard, supEffect, applySaiyanPower, popCard]);
+  }, [eventCard, evEffect, applySaiyanPower, cutInCard]);
 
   const handleDragonBurstResult = useCallback((result, hand, eHand) => {
     const currentMultiplier = dragonBurstMultiplierRef.current;
@@ -1548,7 +1556,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (dragonBurstPhase === "janken") {
       clearInterval(timerRef.current); setTimerActive(false); setPlayerHand(hand); setShowSet(true); setPhase("waiting_enemy");
       setTimeout(() => {
-        const eHand = HANDS[Math.floor(Math.random() * 3)];
+        const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
         const result = applyLoseStreak(judgeJanken(hand, eHand));
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
@@ -1559,7 +1567,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (phase !== "choose") return;
     clearInterval(timerRef.current); setTimerActive(false); setPlayerHand(hand); setShowSet(true); setPhase("waiting_enemy");
     setTimeout(() => {
-      const eHand = HANDS[Math.floor(Math.random() * 3)];
+      const eHand = drawEnemyHand();
       setEnemyHand(eHand); setShowSet(false);
       // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
       const result = applyLoseStreak(judgeJanken(hand, eHand));
@@ -1631,14 +1639,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const kaiokenSelfDmg = (isKaioken && attacker === "player") ? 200 : 0;
     const afterHit = (frozenAnim, hitTarget) => {
       const fromHp = hitTarget === "enemy" ? enemyHpRef.current : playerHpRef.current;
-      // サポート「気のバリア」: 大きな一撃を1回だけ無効化します
+      // イベント「気のバリア」: 大きな一撃を1回だけ無効化します
       let dealt = dmg;
       let blocked = false;
-      if (hitTarget === "player" && barrierReadyRef.current && dmg >= (supportCard?.threshold || 800)) {
+      if (hitTarget === "player" && barrierReadyRef.current && dmg >= (eventCard?.threshold || 800)) {
         barrierReadyRef.current = false; setBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `気のバリア！ ${dmg}ダメージを無効化した！`]);
-        popCard(supportCard, `${dmg} ダメージを無効化！`);
+        cutInCard();
       }
       const newHp = Math.max(0, fromHp - dealt);
       setDmgText({ amount: dealt, target: hitTarget, blocked });
@@ -1852,19 +1860,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         </div>
         );
       })()}
-
-      {/* 条件で発動したサポートカードの通知 */}
-      {cardPopup && (
-        <div key={cardPopup.key} style={{ position: "fixed", top: "26%", left: 0, right: 0, zIndex: 84, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(0,0,0,0.82)", border: `2px solid ${cardPopup.card.color}`, boxShadow: `0 0 26px ${cardPopup.card.color}88`, borderRadius: 10, padding: "10px 18px", animation: "cutInCardIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-            <div style={{ fontSize: 34, filter: `drop-shadow(0 0 10px ${cardPopup.card.color})` }}>{cardPopup.card.illustSymbol}</div>
-            <div>
-              <div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 18, color: cardPopup.card.color, letterSpacing: 1, textShadow: `0 0 10px ${cardPopup.card.color}` }}>{cardPopup.card.name}</div>
-              {cardPopup.text && <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e2e8f0", marginTop: 3, fontWeight: "700" }}>{cardPopup.text}</div>}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 変身の瞬間だけ画面を明るくします */}
       {transformFlash && (

@@ -216,6 +216,7 @@ export const CHARACTERS = {
       ...GOKU_BASE.ultimate,
       video: "/kamehameha_super.mp4",
       videoDuration: 2.58,   // 実測 2.578秒 / 1920x1080 / 約30fps
+      videoHeightMul: 1.5,   // 「超」らしく、通常のかめはめ波より縦を1.5倍に
       // 通常のかめはめ波は先頭3コマが黒（0.1秒）ですが、こちらは黒コマが
       // 1つだけなので、その分だけ飛ばします（フレームの圧縮サイズから判定）。
       videoStartAt: 0.035,

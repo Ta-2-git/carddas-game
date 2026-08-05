@@ -390,7 +390,9 @@ function spawnVideoShot(S, shot, spec, place) {
   const aspect = spec.videoAspect || 16 / 9;
   const span = 2 * (S.spread || SPREAD_WIDE);
   const width = span * (spec.videoSpan || 1.15);
-  const height = width / aspect;
+  // videoHeightMul は「横幅はそのままで縦だけ伸ばす」倍率です
+  // （超かめはめ波を通常より迫力のある太さにするために使います）
+  const height = (width / aspect) * (spec.videoHeightMul || 1);
 
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
