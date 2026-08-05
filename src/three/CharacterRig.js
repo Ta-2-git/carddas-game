@@ -16,6 +16,9 @@ import { getCharacter, MOTION } from "../data/characters";
 
 const FADE = 0.18; // モーション切り替えにかける秒数
 
+/** 現在時刻（ミリ秒）。performance が無い環境でも動くようにしておきます */
+const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
 /** クリップの [start, end] 秒だけを取り出した新しいクリップを作ります */
 function trimClip(THREE, clip, start, end) {
   const out = clip.clone();
@@ -74,6 +77,9 @@ export default class CharacterRig {
     this.current = null;      // 再生中の motion 名
     this.currentAction = null;
     this._boneFixes = [];     // 素体ごとの骨の向きのズレを打ち消す補正
+    // 変身の指示は受けたが、まだ変身モーションの切り替え位置に達していない状態
+    this._pendingTransformSwap = false;
+    this._pendingSwapSince = 0;
 
     this.auraMeshes = {};     // "normal" | "transformed" | "reverted" -> Object3D
     this.auraMode = "normal";
@@ -491,6 +497,7 @@ export default class CharacterRig {
         action.time = at;
       }
       const elapsed = at / ts; // 開始からの実時間（秒）
+      const prevName = this.current;
 
       this.currentAction = action;
       this.current = name;
@@ -516,6 +523,16 @@ export default class CharacterRig {
 
       // 変身モーションならフレーム計測を開始
       this.transformElapsed = name === MOTION.TRANSFORM ? elapsed : -1;
+
+      // 変身モーションが終わって別のモーションへ移る瞬間
+      //（＝変身し終わって立ち上がったポーズ）でモデルを入れ替えます。
+      // startFrame をモーションの最後に置くと、終わって待機へ戻る処理のほうが
+      // 先に走って切り替えを取りこぼすことがあるので、その受け皿です。
+      // この行より上で this.current を確定させてから呼びます。モデルの
+      // 入れ替えは「今のモーションを新しいモデルで続ける」処理を含むためです。
+      if (name !== MOTION.TRANSFORM && prevName === MOTION.TRANSFORM && this._pendingTransformSwap) {
+        this._doTransformSwap();
+      }
     };
 
     const existing = this.actions[name];
@@ -657,15 +674,32 @@ export default class CharacterRig {
     this.transformLevel = lv;
     this.transformed = lv > 0;
     if (lv === 0) {
+      this._pendingTransformSwap = false;
       this.auraMode = "reverted";
       this._applyAuraVisibility();
       this._applyModelForState(); // 解除時は見た目もすぐ元に戻す
     } else if (lv < prev) {
       // 段階が下がるときは、変身モーションを待たずにすぐ切り替えます
+      this._pendingTransformSwap = false;
       this._applyModelForState();
+    } else {
+      // 段階が上がる場合、オーラとモデルは「変身モーションの startFrame に
+      // 到達したら」同時に切り替えます（update 内で処理）。
+      // それまでは切り替えを保留にしておきます。この印が無いと、変身モーション
+      // がまだ始まっていない一瞬のあいだに update の受け皿処理が走ってしまい、
+      // startFrame を何フレームにしてもすぐ切り替わってしまいます。
+      this._pendingTransformSwap = true;
+      this._pendingSwapSince = now();
     }
-    // 段階が上がる場合、オーラとモデルは「変身モーションの startFrame に
-    // 到達したら」同時に切り替えます（update 内で処理）
+  }
+
+  /** オーラとモデルを、いまの変身段階の見た目に切り替えます */
+  _doTransformSwap() {
+    this._pendingTransformSwap = false;
+    this.transformed = true;
+    this.auraMode = this._wantedAuraMode();
+    this._applyAuraVisibility();
+    this._applyModelForState();
   }
 
   /** 今の変身段階で表示すべきオーラの種類を返します */
@@ -721,18 +755,19 @@ export default class CharacterRig {
         const wantAura = this._wantedAuraMode();
         const needSwap = this._activeKey !== this._wantedVariant();
         if (this.transformElapsed >= startSec && (this.auraMode !== wantAura || needSwap)) {
-          this.transformed = true;
-          this.auraMode = wantAura;
-          this._applyAuraVisibility();
-          this._applyModelForState(); // 気が爆発する瞬間にモデルも入れ替える
+          this._doTransformSwap(); // 変身し終わる瞬間にモデルも入れ替える
         }
       }
     } else if (this.transformed && this.auraMode !== this._wantedAuraMode() && this.auraMeshes.transformed) {
       // 変身モーションを再生していない（既に別のモーションへ移った / 用意が無い）場合は
-      // 変身状態である限りオーラを出し続けます
-      this.auraMode = this._wantedAuraMode();
-      this._applyAuraVisibility();
-      this._applyModelForState();
+      // 変身状態である限りオーラを出し続けます。
+      // ただし「これから変身モーションを再生する」ところなら待ちます。
+      // 変身の指示とモーションの指定は同じタイミングで届かないことがあり、
+      // ここで先に切り替えてしまうと startFrame が効かなくなります。
+      // モーションがいつまでも来ない場合の保険として1秒で打ち切ります。
+      if (!this._pendingTransformSwap || now() - this._pendingSwapSince > 1000) {
+        this._doTransformSwap();
+      }
     }
 
     // --- オーラを体に追従させる ---
