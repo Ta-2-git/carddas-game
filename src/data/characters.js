@@ -241,6 +241,27 @@ export const CHARACTERS = {
     },
   },
 
+  // ---------------- No.004 VegetaSS1（じゃんけん勝利でスーパーサイヤ人） ----------------
+  // 基本モーションはNo.001と共通。素体・変身後モデルと必殺技だけ差し替えます。
+  c011: {
+    ...GOKU_BASE,
+    name: "VegetaSS1",
+    model: `${R2}/vegeta.glb`,
+    transformedModel: `${R2}/vegeta_ssj.glb`,
+    motions: {
+      ...GOKU_BASE.motions,
+      // ファイナルフラッシュ。実測で素材2.867秒、2.0秒で腕が伸びきって
+      // 両手首が合わさる（手首間 40→4.7）。そこから先は同じ姿勢のままなので
+      // 2.6秒までを2.2秒に詰めて再生します。
+      ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
+    },
+    // 動画素材が無いので、内蔵のビームエフェクトで出します（金色の極太ビーム）
+    ultimate: {
+      model: "", color: "#ffe27a", effect: "beam", scale: 1.6, speed: 9, video: "",
+    },
+    aura: GOKU_AURA(AURA_PRESETS.gold),
+  },
+
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------
   c002: {
     name: "ブルーS太郎",

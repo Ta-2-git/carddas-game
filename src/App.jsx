@@ -26,6 +26,7 @@ const BATTLE_BG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/battle_bg
 const IMG_CARD_GOKU = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku_card.png.PNG";
 const IMG_CARD_GOKU_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/71AAA89C-B4AF-423F-9BE4-D2CC74318FF0.png";
 const IMG_CARD_GOKU_SS3 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/8D809B5A-0E97-4B58-9458-4DE283208BB3.png";
+const IMG_CARD_VEGETA_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No004.png";
 const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
 const IMG_PUNCH_SHEET = "";
 const IMG_BEAM_SHEET = "";
@@ -127,6 +128,9 @@ const CARDS = [
   // No.003 GokuSS3 … 2段階変身。じゃんけんに勝つとスーパーサイヤ人、
   // さらに2回連続で勝つとスーパーサイヤ人3へ。負けると1段階戻ります。
   { id: "c010", name: "GokuSS3", rarity: "SSR", hp: 2500, atk: 350, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#fbbf24", isGoku: true, isGokuSS3: true, img: IMG_CARD_GOKU_SS3, description: "じゃんけんに勝つとスーパーサイヤ人、2連勝でスーパーサイヤ人3へ！SS3はHP3倍・ATK2倍。負けると1段階戻る。" },
+  // No.004 VegetaSS1 … 変身の仕組みはNo.002と同じ。必殺技はファイナルフラッシュ。
+  // is3D は「3Dモデルとモーションを使うキャラ」の印です（悟空系の isGoku と同じ役割）。
+  { id: "c011", name: "VegetaSS1", rarity: "SR", hp: 2300, atk: 400, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#60a5fa", is3D: true, isVegetaSS1: true, img: IMG_CARD_VEGETA_SS1, ultimateName: "ファイナルフラッシュ", moveLabels: { rock: "ファイナルフラッシュ", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
 ];
 
 const GOTENKS_CARD = {
@@ -144,7 +148,7 @@ const ENEMIES = [
   { id: "e003", name: "魔人ダーク",       hp: 3200, atk: 420, rock: "rock_punch", scissors: "scissors_slash", paper: "paper_beam", color: "#8b5cf6" },
 ];
 
-const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009", "c010"];
+const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009", "c010", "c011"];
 
 const SUPPORT_CARDS = [
   { id: "s001", name: "怒り", rarity: "SR", color: "#ef4444", glow: "#dc2626", description: "1段階変身した状態でバトル開始。孫悟空は界王拳状態からスタート。", timing: "battle_start", effect: "transform_start", illustSymbol: "🔥" },
@@ -309,7 +313,7 @@ const GokuCardDisplay = ({ card, selected, onClick, small = false }) => {
 };
 
 const CardDisplay = ({ card, selected, onClick, small = false }) => {
-  if (card.isGoku) return <GokuCardDisplay card={card} selected={selected} onClick={onClick} small={small} />;
+  if (card.isGoku || card.img) return <GokuCardDisplay card={card} selected={selected} onClick={onClick} small={small} />;
   const rar = RARITY_CONFIG[card.rarity];
   const w = small ? 80 : 130; const h = small ? 112 : 182;
   return (
@@ -422,9 +426,10 @@ const JankenBtn = ({ hand, playerCard, onSelect, selected }) => {
   const locked = selected !== null;
   const isSelected = selected === hand;
   const color = HAND_COLOR[hand];
-  const MOVE_LABEL = playerCard?.isGoku
-    ? { rock: "超かめはめ波", scissors: "回転蹴り", paper: "正拳突き" }
-    : { rock: "必殺技", scissors: "蹴り", paper: "パンチ" };
+  const MOVE_LABEL = playerCard?.moveLabels
+    || (playerCard?.isGoku
+      ? { rock: "超かめはめ波", scissors: "回転蹴り", paper: "正拳突き" }
+      : { rock: "必殺技", scissors: "蹴り", paper: "パンチ" });
   return (
     <button onClick={() => !locked && onSelect(hand)} style={{ width: 64, height: 64, borderRadius: "50%", background: `radial-gradient(circle at 35% 35%, ${HAND_BG[hand]}, #000)`, border: isSelected ? `3px solid ${color}` : `3px solid ${locked ? "#1f2937" : color}`, cursor: locked ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, padding: 0, flexShrink: 0, boxShadow: isSelected ? `0 0 20px ${color}cc, 0 0 40px ${color}55, inset 0 1px 0 rgba(255,255,255,0.2)` : locked ? "none" : `0 0 14px ${color}55, inset 0 1px 0 rgba(255,255,255,0.1)`, opacity: locked && !isSelected ? 0.22 : 1, transform: isSelected ? "scale(1.12)" : "scale(1)", transition: "all 0.15s" }}>
       <span style={{ fontSize: 24, lineHeight: 1 }}>{HAND_EMOJI[hand]}</span>
@@ -984,12 +989,16 @@ const DragonBurstDecideScreen = ({ data }) => {
 };
 
 const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) => {
-  // 界王拳を使うのは No.001 孫悟空だけ。SS1/SS3 は変身するので界王拳にしません
+  // is3D … 3Dモデルとモーションを持つキャラ（悟空系は isGoku が同じ意味）
+  const is3D = Boolean(playerCard.isGoku || playerCard.is3D);
+  // 界王拳を使うのは No.001 孫悟空だけ。変身するキャラは界王拳にしません
   const usesKaioken = Boolean(playerCard.isGoku) && !playerCard.isGokuSS1 && !playerCard.isGokuSS3;
+  /** 必殺技の名前はキャラごとに差し替えられます（ベジータならファイナルフラッシュ） */
+  const moveName = (mv) => (mv && mv.id === "rock_kamehameha" && playerCard.ultimateName) ? playerCard.ultimateName : (mv ? mv.name : "");
   const startsWithKaioken = supportCard?.effect === "transform_start" && usesKaioken;
   const startsWithSSJ = supportCard?.effect === "transform_start" && playerCard.isGotenks;
   // GokuSS1 / GokuSS3 も「怒り」でスーパーサイヤ人スタートにします
-  const startsWithSS1 = supportCard?.effect === "transform_start" && playerCard.isGokuSS1;
+  const startsWithSS1 = supportCard?.effect === "transform_start" && (playerCard.isGokuSS1 || playerCard.isVegetaSS1);
   const startsWithSS3 = supportCard?.effect === "transform_start" && playerCard.isGokuSS3;
   const startsWithBoost = supportCard?.effect === "boost_stats";
   const boostedHp = startsWithBoost ? playerCard.hp + (supportCard.hpBoost || 0) : playerCard.hp;
@@ -1047,7 +1056,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const getGotenksMaxHp = (lv) => { if (!isGotenks) return playerCard.hp; if (lv === 1) return Math.floor(playerCard.hp * 1.5); if (lv === 2) return playerCard.hp * 2; return playerCard.hp; };
 
   // ---- GokuSS1（じゃんけんに勝つと変身 / 攻撃を受けると解除）----
-  const isSS1Char = Boolean(playerCard.isGokuSS1);
+  const isSS1Char = Boolean(playerCard.isGokuSS1 || playerCard.isVegetaSS1);
   const SS1_HP_MUL = 1.5;
   const SS1_ATK_MUL = 1.2;
   const [ss1Active, setSS1Active] = useState(false);
@@ -1330,7 +1339,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       const { atkResult, defResult, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, attacker, isFirstWin, ss1Win, ss3Win } = rouletteState;
       const isSpecial = atkResult === "special";
       let move;
-      if (isSpecial) { move = attacker === "player" ? (playerCard.isGoku ? MOVES.rock_kamehameha : MOVES.rock_punch) : MOVES.rock_punch; }
+      if (isSpecial) { move = attacker === "player" ? (is3D ? MOVES.rock_kamehameha : MOVES.rock_punch) : MOVES.rock_punch; }
       else { move = (pendingMove && pendingMove.id === "rock_kamehameha") ? (attacker === "player" ? MOVES.paper_punch : MOVES.rock_punch) : pendingMove; }
       // 通常攻撃は技の種類によらず一律 ATK×1.0〜1.3倍、必殺技は一律 ATK×2.5倍。
       // 必殺技かどうかは技名ではなく、攻撃ルーレットの結果で決まります。
@@ -1640,7 +1649,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     // GokuSS1 の変身は、ルーレットが終わって画面が明るくなってから見せます
     const dbSS1Win = isSS1Char && attacker === "player" && !ss1ActiveRef.current;
     const dbSS3Win = attacker === "player" ? nextSS3Level() : 0;
-    setBattleLog(l => [...l, `ドラゴンバースト！ ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！`]);
+    setBattleLog(l => [...l, `ドラゴンバースト！ ${attacker === "player" ? playerCard.name : enemyData.name}の${moveName(move)}！`]);
     setClashSparks(false); setDragonBurstPhase(null); setPlayerClashOffset(0); setEnemyClashOffset(0);
     setJankenResultLabel(null); setJankenResult(null); setPhase("attack"); setTimerActive(false);
     dragonBurstMultiplierRef.current = 1; setDragonBurstMultiplier(1);
@@ -1730,7 +1739,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
   const doAttack = (attacker, move, dmg, hand, eHand, isKaioken) => {
     // 必殺技以外の攻撃は、近接攻撃と気弾攻撃をだいたい交互に出します
-    const isPlayerNormal = attacker === "player" && playerCard.isGoku && move.id !== "rock_kamehameha";
+    const isPlayerNormal = attacker === "player" && is3D && move.id !== "rock_kamehameha";
     const useKiBlast = isPlayerNormal && playerAttackCountRef.current % 2 === 1;
     if (isPlayerNormal) playerAttackCountRef.current += 1;
     // 気弾は離れたまま撃つので、接近（ダッシュ）はしません
@@ -1817,11 +1826,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (needsDash) {
       setPlayerAnim("dash"); setEnemyAnim("idle"); setPlayerOffset(160);
       setTimeout(() => { setPlayerAnim("idle"); }, 600);
-      setTimeout(() => { if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); setEnemyAnim("hit"); setDamageNum(dmg); setDamagePos("enemy"); setBattleLog(l => [...l, `T${turn}: ${playerCard.name}の${move.name}！ ${dmg}ダメージ！`]); }, 1100);
+      setTimeout(() => { if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); setEnemyAnim("hit"); setDamageNum(dmg); setDamagePos("enemy"); setBattleLog(l => [...l, `T${turn}: ${playerCard.name}の${moveName(move)}！ ${dmg}ダメージ！`]); }, 1100);
       setTimeout(() => { afterHit("punch", "enemy"); }, 1800);
       return;
     }
-    const isUltimate = attacker === "player" && playerCard.isGoku && move.id === "rock_kamehameha";
+    const isUltimate = attacker === "player" && is3D && move.id === "rock_kamehameha";
     const shotMotion = isUltimate ? MOTION.ULTIMATE : (useKiBlast ? MOTION.KI_BLAST : null);
     // 撃ってから当たるまで（必殺技はエネルギー波を1秒見せる）
     const travelMs = isUltimate ? 1000 : 500;
@@ -1830,12 +1839,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       if (attacker === "player") setEnemyAnim("hit");
       else { setEnemyAnim("idle"); setPlayerAnim("hit"); playerHitStartRef.current = performance.now(); }
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
-      setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${move.name}！ ${dmg}ダメージ！`]);
+      setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${moveName(move)}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
     };
 
     if (attacker === "player") {
-      if (playerCard.isGoku) {
+      if (is3D) {
         if (isUltimate) setPlayerAnim("beam");
         else if (useKiBlast) setPlayerAnim(MOTION.KI_BLAST);
         else if (move.id === "scissors_kick") setPlayerAnim("kick");
