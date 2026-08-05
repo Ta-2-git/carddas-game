@@ -1169,7 +1169,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
           setZoomPlayerAnim(MOTION.TRANSFORM);
           flashForTransform(ms + 300);
-          if (startsWithSS3) applySS3Level(1); else applySS1Transform();
+          if (startsWithSS3) {
+            applySS3Level(1);
+            // 「怒り」で既にスーパーサイヤ人なので、次に1回勝てばSS3へ上がるよう
+            // 連勝数を1つ進めた状態から始めます
+            winStreakRef.current = 1;
+          } else applySS1Transform();
           T(() => { setZoomPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300);
         }
