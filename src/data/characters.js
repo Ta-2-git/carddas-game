@@ -255,9 +255,13 @@ export const CHARACTERS = {
       // 2.6秒までを2.2秒に詰めて再生します。
       ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
     },
-    // 動画素材が無いので、内蔵のビームエフェクトで出します（金色の極太ビーム）
+    // かめはめ波の動画を流用し、色だけ金色に塗り替えて使います。
+    // videoTint は「白い芯は白のまま、色のついた部分だけこの色にする」指定です。
     ultimate: {
-      model: "", color: "#ffe27a", effect: "beam", scale: 1.6, speed: 9, video: "",
+      ...GOKU_BASE.ultimate,
+      color: "#ffcc33",
+      videoTint: "#ffb300",
+      videoTintAmount: 1.0,
     },
     aura: GOKU_AURA(AURA_PRESETS.gold),
   },

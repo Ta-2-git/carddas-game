@@ -328,6 +328,8 @@ uniform float uKeyLow;   // これ以下の明るさは完全に透明
 uniform float uKeyHigh;  // これ以上の明るさは完全に不透明
 uniform float uOpacity;
 uniform float uBoost;    // 明るさの強調
+uniform vec3  uTint;     // 色を塗り替えるときの色
+uniform float uTintAmt;  // 0＝素材のまま / 1＝完全に塗り替え
 
 void main() {
   vec3 c = texture2D(uMap, vUv).rgb;
@@ -338,6 +340,14 @@ void main() {
 
   // 浮いている黒の分を引いて伸ばす（暗部が灰色にならないように）
   vec3 rgb = max(c - vec3(uKeyLow), vec3(0.0)) / max(1.0 - uKeyLow, 0.001);
+
+  // 色の塗り替え。明るさと「白っぽさ」に分解し、白い芯は白のまま残して
+  // 色のついた部分だけを uTint に置き換えます（オーラと同じ考え方）。
+  if (uTintAmt > 0.0) {
+    float l = max(max(rgb.r, rgb.g), rgb.b);
+    float white = l > 0.001 ? min(min(rgb.r, rgb.g), rgb.b) / l : 0.0;
+    rgb = mix(rgb, mix(uTint, vec3(1.0), white) * l, uTintAmt);
+  }
 
   gl_FragColor = vec4(rgb * uBoost, a * uOpacity);
 }
@@ -353,6 +363,8 @@ function makeVideoMaterial(THREE, tex, spec) {
       uKeyHigh: { value: spec.videoKeyHigh != null ? spec.videoKeyHigh : 0.22 },
       uOpacity: { value: 1 },
       uBoost: { value: spec.videoBoost != null ? spec.videoBoost : 1.0 },
+      uTint: { value: new THREE.Color(spec.videoTint || "#ffffff") },
+      uTintAmt: { value: spec.videoTint ? (spec.videoTintAmount != null ? spec.videoTintAmount : 1.0) : 0.0 },
     },
     vertexShader: VIDEO_VERT,
     fragmentShader: VIDEO_FRAG,
