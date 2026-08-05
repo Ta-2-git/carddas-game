@@ -761,7 +761,7 @@ const DataAssembleChar = ({ card, assembled }) => {
 };
 
 // passive: 進行を止めない通知用。短めに出て、タップも吸いません
-const CardCutIn = ({ card, cardType, onDone, passive = false }) => {
+const CardCutIn = ({ card, cardType, onDone, passive = false, owner = "player" }) => {
   const [phase, setPhase] = useState("cutin");
   useEffect(() => {
     const k = passive ? 0.55 : 1;
@@ -787,6 +787,8 @@ const CardCutIn = ({ card, cardType, onDone, passive = false }) => {
       {(phase === "card" || phase === "effect" || phase === "fadeout") && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
           <div style={{ animation: "fadeInUp 0.3s ease", textAlign: "center" }}>
+            {/* どちらのカードが発動したのか分かるようにします */}
+            <div style={{ fontSize: 13, fontWeight: "900", letterSpacing: 4, marginBottom: 6, color: owner === "enemy" ? "#f87171" : "#4ade80", textShadow: `0 0 12px ${owner === "enemy" ? "#ef4444" : "#22c55e"}`, fontFamily: "'Courier New',monospace" }}>{owner === "enemy" ? "あいての" : "あなたの"}</div>
             <div style={{ display: "inline-block", background: `linear-gradient(135deg,${ac}22,${ac}44)`, border: `2px solid ${ac}`, borderRadius: 8, padding: "5px 18px", fontSize: 12, fontWeight: "900", color: ac, fontFamily: "'Courier New',monospace", letterSpacing: 3 }}>{isSupport ? "⚡ サポートカード発動！" : "🌟 イベントカード発動！"}</div>
           </div>
           <div style={{ animation: phase === "card" ? "cutInCardIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both" : "none" }}>
@@ -1184,10 +1186,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const barrierReadyRef = useRef(evEffect === "ki_barrier");
   // 発動時のカットイン（イベントカード共通の演出を使います）
   // 条件発動のカットインは進行を止めないので、タップを吸わないようにします
-  const cutInCard = useCallback((card = null) => {
+  const cutInCard = useCallback((card = null, owner = "player") => {
     const c = card || eventCard;
     if (!c) return;
     setCutInEventCard(c);
+    setCutInOwner(owner);
     setCutInPassive(true);
     setShowEventCutIn(true);
     setEventCutInDone(null);
@@ -1195,6 +1198,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   // ---- 敵のイベントカード（自分と同じ4種類から1枚。効果も同じ内容）----
   const enemyEv = enemyEventCard?.effect;
   const enemyLoseStreakRef = useRef(0);   // 敵から見た連敗数（＝自分が勝った回数）
+  // このラウンドで既に勝敗をひっくり返したか（自分と敵で二重に発動させないため）
+  const reversedThisRoundRef = useRef(false);
   const enemySaiyanMulRef = useRef(1);    // サイヤ人の力によるATK倍率
   const enemySaiyanUsedRef = useRef(false);
   const [enemySaiyanActive, setEnemySaiyanActive] = useState(false);
@@ -1203,6 +1208,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const enemyRevivedRef = useRef(false);
   // カットインに出すカード（自分の分と敵の分を使い分けます）
   const [cutInEventCard, setCutInEventCard] = useState(null);
+  const [cutInOwner, setCutInOwner] = useState("player");
 
   const [roundPhase, setRoundPhase] = useState("done");
   const [showRoundNum, setShowRoundNum] = useState(1);
@@ -1286,16 +1292,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
    * バトル開始時のステータス表示。0から基礎値まで数え上げ、
    * スカウターの音を鳴らします（カードによる上昇と同じ見せ方）。
    */
+  const REVEAL_MS = 1500; // 0から基礎ステータスまで数え上げる時間
   const revealStats = useCallback((who) => {
     playSe(SE.scouter);
     if (who === "player") {
       setZoomPlayerHp(0); setZoomPlayerAtk(0);
-      animateValue("zoomHp", 0, playerCard.hp, 900, setZoomPlayerHp);
-      animateValue("zoomAtk", 0, playerCard.atk, 900, setZoomPlayerAtk);
+      animateValue("zoomHp", 0, playerCard.hp, REVEAL_MS, setZoomPlayerHp);
+      animateValue("zoomAtk", 0, playerCard.atk, REVEAL_MS, setZoomPlayerAtk);
     } else {
       setZoomEnemyHp(0); setZoomEnemyAtk(0);
-      animateValue("zoomEHp", 0, enemyData.hp, 900, setZoomEnemyHp);
-      animateValue("zoomEAtk", 0, enemyData.atk, 900, setZoomEnemyAtk);
+      animateValue("zoomEHp", 0, enemyData.hp, REVEAL_MS, setZoomEnemyHp);
+      animateValue("zoomEAtk", 0, enemyData.atk, REVEAL_MS, setZoomEnemyAtk);
     }
   }, [animateValue, playerCard, enemyData]);
 
@@ -1322,7 +1329,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     T(() => { setZoomTarget("player"); setShowZoomStats(false); }, 1400);
     T(() => { setShowZoomStats(true); revealStats("player"); }, 1900);
     if (supportCard) {
-      T(() => { setShowSupportBanner(true); }, 3500);
+      T(() => { setShowSupportBanner(true); }, 3600);
       T(() => { setShowSupportBanner(false); setShowSupportInfo(true); }, 4400);
       T(() => { setShowSupportInfo(false); }, 6500);
       T(() => {
@@ -1344,6 +1351,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
           const ms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
           setZoomPlayerAnim(MOTION.TRANSFORM);
           flashForTransform(ms + 300);
+          playSe(SE.scouter); // カードによる開始時のステータス上昇
           if (startsWithSS3) {
             applySS3Level(1);
           } else applySS1Transform();
@@ -1376,14 +1384,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       T(() => { setEnemyVisible(true); setEnterPhase("enemy_land"); }, 8500 + HOLD);
       T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 9100 + HOLD);
       T(() => { setShowZoomStats(true); revealStats("enemy"); }, 9600 + HOLD);
-      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 11100 + HOLD);
-      T(() => { startRound1Sequence(); }, 11400 + HOLD);
+      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 11400 + HOLD);
+      T(() => { startRound1Sequence(); }, 11700 + HOLD);
     } else {
-      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnemyVisible(true); setEnterPhase("enemy_land"); }, 3200);
-      T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 3800);
-      T(() => { setShowZoomStats(true); revealStats("enemy"); }, 4300);
-      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 5800);
-      T(() => { startRound1Sequence(); }, 6100);
+      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnemyVisible(true); setEnterPhase("enemy_land"); }, 3600);
+      T(() => { setZoomTarget("enemy"); setShowZoomStats(false); }, 4200);
+      T(() => { setShowZoomStats(true); revealStats("enemy"); }, 4700);
+      T(() => { setZoomTarget(null); setShowZoomStats(false); setEnterPhase("done"); }, 6500);
+      T(() => { startRound1Sequence(); }, 6800);
     }
     return () => timers.forEach(clearTimeout);
   }, []);
@@ -1584,7 +1592,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     const newAtk = Math.floor(baseAtk * SS1_ATK_MUL);
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
     // 数値は一瞬で切り替えず、少しずつ増やして見せます
-    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
     animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
     animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
@@ -1606,7 +1613,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
     setPlayerHp(newHp); playerHpRef.current = newHp;
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
-    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
   }, [isSS1Char, playerCard, animateValue]);
 
@@ -1637,7 +1643,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     setPlayerMaxHp(newMax); playerMaxHpRef.current = newMax;
     setPlayerHp(newHp); playerHpRef.current = newHp;
     setPlayerCurrentAtk(newAtk); playerAtkRef.current = newAtk;
-    playSe(SE.scouter);
     animateValue("dispHp", prevHp, newHp, 900, setPlayerDisplayHp);
     animateValue("zoomHp", prevHp, newHp, 900, setZoomPlayerHp);
     animateValue("zoomAtk", baseAtk, newAtk, 900, setZoomPlayerAtk);
@@ -1710,6 +1715,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     if (need > 0 && loseStreakRef.current >= need) {
       if (evEffect === "reverse_result") {
         loseStreakRef.current = 0;
+        reversedThisRoundRef.current = true;
         setBattleLog(l => [...l, `戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
         cutInCard();
         return "win";
@@ -1731,7 +1737,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     enemySaiyanMulRef.current = enemyEventCard?.atkMul || 2;
     setEnemySaiyanActive(true);
     setBattleLog(l => [...l, `${enemyData.name}のサイヤ人の力！ HP${to - from}回復・ATK${enemySaiyanMulRef.current}倍！`]);
-    cutInCard(enemyEventCard);
+    cutInCard(enemyEventCard, "enemy");
   }, [enemyEventCard, enemyData, animateValue, cutInCard]);
 
   /** 敵が1回攻撃したらATKを元に戻します */
@@ -1754,10 +1760,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     enemyLoseStreakRef.current += 1;
     const need = enemyEventCard.loseStreak || 0;
     if (need > 0 && enemyLoseStreakRef.current >= need) {
-      if (enemyEv === "reverse_result") {
+      // 自分の「戦いのセンス」で既にひっくり返っているなら、
+      // ここでさらに戻すと結果が元通りになってしまうので発動させません
+      if (enemyEv === "reverse_result" && !reversedThisRoundRef.current) {
         enemyLoseStreakRef.current = 0;
         setBattleLog(l => [...l, `${enemyData.name}の戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
-        cutInCard(enemyEventCard);
+        cutInCard(enemyEventCard, "enemy");
         return "lose";
       }
       if (enemyEv === "saiyan_power") applyEnemySaiyanPower();
@@ -1823,6 +1831,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       setTimeout(() => {
         const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
+        reversedThisRoundRef.current = false;
         const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
         if (result === "win" || result === "lose") addKi(result === "lose");
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
@@ -1836,7 +1845,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       const eHand = drawEnemyHand();
       setEnemyHand(eHand); setShowSet(false);
       // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
-      const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
+      reversedThisRoundRef.current = false;
+        const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
       // 勝敗が決まった瞬間に気力ゲージを増やします。
       // ここで10メモリに達すれば、このターンの攻撃から2倍になります。
       if (result === "win" || result === "lose") addKi(result === "lose");
@@ -1934,7 +1944,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
         enemyBarrierReadyRef.current = false; setEnemyBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `${enemyData.name}の気のバリア！ ${dmg}ダメージを無効化した！`]);
-        cutInCard(enemyEventCard);
+        cutInCard(enemyEventCard, "enemy");
       }
       const newHp = Math.max(0, fromHp - dealt);
       setDmgText({ amount: dealt, target: hitTarget, blocked });
@@ -1962,7 +1972,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
                 const reviveHp = Math.floor(enemyData.hp / 2);
                 setEnemyHp(reviveHp); enemyHpRef.current = reviveHp; setEnemyDisplayHp(reviveHp);
                 setBattleLog(l => [...l, `${enemyData.name}のナメック星人の力発動！ HP ${reviveHp} 回復！`]);
-                cutInCard(enemyEventCard);
+                cutInCard(enemyEventCard, "enemy");
                 setPlayerAnim("idle"); setEnemyAnim("idle");
                 setDamageNum(null); setCurrentMove(null);
                 nextTurn(isKaioken, turn + 1, hitTarget === "player");
@@ -1971,7 +1981,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
             else {
               const canRevive = eventCard?.effect === "revive_half" && !eventCardUsedRef.current && turn <= 5;
               if (canRevive) {
-                eventCardUsedRef.current = true; setCutInEventCard(eventCard); setShowEventCutIn(true);
+                eventCardUsedRef.current = true; setCutInEventCard(eventCard); setCutInOwner("player"); setShowEventCutIn(true);
                 setEventCutInDone(() => () => {
                   const reviveHp = Math.floor(playerCard.hp / 2);
                   setPlayerHp(reviveHp); playerHpRef.current = reviveHp; setPlayerDisplayHp(reviveHp);
@@ -2117,7 +2127,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
 
   return (
     <div style={{ minHeight: "100vh", background: BATTLE_BG ? `url(${BATTLE_BG}) center bottom / cover` : "linear-gradient(180deg,#0a1628,#1a2a4a)", fontFamily: "monospace", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-      {showEventCutIn && (cutInEventCard || eventCard) && (<CardCutIn card={cutInEventCard || eventCard} cardType="event" passive={cutInPassive} onDone={() => { setShowEventCutIn(false); setCutInPassive(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
+      {showEventCutIn && (cutInEventCard || eventCard) && (<CardCutIn card={cutInEventCard || eventCard} cardType="event" owner={cutInOwner} passive={cutInPassive} onDone={() => { setShowEventCutIn(false); setCutInPassive(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
 
       <div style={{ padding: "10px 14px 8px", position: "relative", zIndex: 2, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, alignItems: "center" }}>

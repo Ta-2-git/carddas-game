@@ -66,9 +66,11 @@ const SE_OPTIONS = {
 //        つなぎ目が分かりません。
 //        変身音とオーラ音で3〜4倍の音量差があるので、変身音が鳴り終わる
 //        あたりでゲインを上げ、オーラ音が埋もれないようにします。
+//        オーラのゲインは 5.8 → 3.9 に下げています（波形の最大 0.40 → 0.27）。
+//        近接攻撃音が 0.53 なので、その半分くらいの控えめな音量です。
 // rouletteSpin … 2.67秒。全体が平坦（0.24前後）なので丸ごと繰り返します。
 const LOOP_SPECS = {
-  aura: { src: SE.aura, loopStart: 2.5, gain: 2.4, gainAfter: 5.8, rampAt: 1.0, rampDur: 0.4 },
+  aura: { src: SE.aura, loopStart: 2.5, gain: 2.4, gainAfter: 3.9, rampAt: 1.0, rampDur: 0.4 },
   rouletteSpin: { src: SE.rouletteSpin, loopStart: 0, gain: 1.2 },
 };
 
