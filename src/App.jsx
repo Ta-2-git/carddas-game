@@ -699,19 +699,21 @@ const DataAssembleChar = ({ card, assembled }) => {
   );
 };
 
-const CardCutIn = ({ card, cardType, onDone }) => {
+// passive: 進行を止めない通知用。短めに出て、タップも吸いません
+const CardCutIn = ({ card, cardType, onDone, passive = false }) => {
   const [phase, setPhase] = useState("cutin");
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("card"), 800);
-    const t2 = setTimeout(() => setPhase("effect"), 1600);
-    const t3 = setTimeout(() => setPhase("fadeout"), 3200);
-    const t4 = setTimeout(() => onDone(), 3800);
+    const k = passive ? 0.55 : 1;
+    const t1 = setTimeout(() => setPhase("card"), 800 * k);
+    const t2 = setTimeout(() => setPhase("effect"), 1600 * k);
+    const t3 = setTimeout(() => setPhase("fadeout"), 3200 * k);
+    const t4 = setTimeout(() => onDone(), 3800 * k);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, []);
   const isSupport = cardType === "support";
   const ac = card.color;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 95, overflow: "hidden", opacity: phase === "fadeout" ? 0 : 1, transition: phase === "fadeout" ? "opacity 0.6s ease" : "none", background: isSupport ? "linear-gradient(160deg,rgba(26,0,0,0.94),rgba(48,0,16,0.96),rgba(26,5,0,0.94))" : "linear-gradient(160deg,rgba(0,16,26,0.94),rgba(0,26,48,0.96),rgba(0,10,16,0.94))" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 95, overflow: "hidden", pointerEvents: passive ? "none" : "auto", opacity: phase === "fadeout" ? 0 : 1, transition: phase === "fadeout" ? "opacity 0.6s ease" : "none", background: isSupport ? "linear-gradient(160deg,rgba(26,0,0,0.94),rgba(48,0,16,0.96),rgba(26,5,0,0.94))" : "linear-gradient(160deg,rgba(0,16,26,0.94),rgba(0,26,48,0.96),rgba(0,10,16,0.94))" }}>
       {Array.from({ length: 12 }).map((_, i) => (<div key={i} style={{ position: "absolute", top: "50%", left: "50%", width: "200vw", height: 1.5, background: `linear-gradient(90deg,transparent 30%,${ac}44,transparent 70%)`, transform: `rotate(${i * 30}deg)`, transformOrigin: "0 50%", animation: "rayRotate 5s linear infinite" }} />))}
       {phase === "cutin" && (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "cutInBannerIn 0.4s cubic-bezier(0.22,1,0.36,1) forwards" }}>
@@ -972,6 +974,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const enemyHpRef = useRef(enemyData.hp);
   const eventCardUsedRef = useRef(false);
   const [showEventCutIn, setShowEventCutIn] = useState(false);
+  // true のときはカットインが操作を邪魔しません（条件発動の通知用）
+  const [cutInPassive, setCutInPassive] = useState(false);
   const [eventCutInDone, setEventCutInDone] = useState(null);
   const [rouletteState, setRouletteState] = useState(null);
   const [atkRouletteLevel, setAtkRouletteLevel] = useState(1);
@@ -1045,8 +1049,10 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const [barrierReady, setBarrierReady] = useState(evEffect === "ki_barrier");
   const barrierReadyRef = useRef(evEffect === "ki_barrier");
   // 発動時のカットイン（イベントカード共通の演出を使います）
+  // 条件発動のカットインは進行を止めないので、タップを吸わないようにします
   const cutInCard = useCallback(() => {
     if (!eventCard) return;
+    setCutInPassive(true);
     setShowEventCutIn(true);
     setEventCutInDone(null);
   }, [eventCard]);
@@ -1368,9 +1374,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     ss1ActiveRef.current = true; setSS1Active(true);
     setBattleLog(l => [...l, `スーパーサイヤ人！！ HP1.5倍・ATK1.2倍！`]);
     // 見た目（変身モーション → オーラ＋モデル入れ替え）
-    setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true);
+    // 同じモーション名を再指定しても再生されないので、一度待機を挟みます
+    setPlayerAnim("idle"); setTransformShown(true);
+    setTimeout(() => setPlayerAnim(MOTION.TRANSFORM), 30);
     const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
-    setTimeout(() => setPlayerAnim("idle"), tms + 50);
+    setTimeout(() => setPlayerAnim("idle"), tms + 80);
     // ステータス（HPは今の割合を保ったまま最大値を上げる）
     const baseMax = playerMaxHpRef.current;
     const baseAtk = playerAtkRef.current;
@@ -1441,9 +1449,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (lv > cur) {
       const label = lv === 2 ? "⚡⚡ スーパーサイヤ人3！！" : "⚡ スーパーサイヤ人！";
       setBattleLog(l => [...l, `${label} HP${SS3_MUL[lv].hp}倍・ATK${SS3_MUL[lv].atk}倍！`]);
-      setPlayerAnim(MOTION.TRANSFORM);
+      // 直前のモーション名と同じだと React も rig も「変化なし」と判断して
+      // 再生されないため、一度待機を挟んで必ず頭から流します
+      setPlayerAnim("idle");
+      setTimeout(() => setPlayerAnim(MOTION.TRANSFORM), 30);
       const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
-      setTimeout(() => setPlayerAnim("idle"), tms + 50);
+      setTimeout(() => setPlayerAnim("idle"), tms + 80);
       return tms;
     }
     setBattleLog(l => [...l, lv === 0 ? `変身解除！ 通常の状態に戻った。` : `1段階戻った！ スーパーサイヤ人へ。`]);
@@ -1564,6 +1575,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
         const result = applyLoseStreak(judgeJanken(hand, eHand));
+        if (result === "win") winStreakRef.current += 1;
+        else if (result === "lose") winStreakRef.current = 0;
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
         setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, 1500);
       }, 600);
@@ -1811,7 +1824,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
   return (
     <div style={{ minHeight: "100vh", background: BATTLE_BG ? `url(${BATTLE_BG}) center bottom / cover` : "linear-gradient(180deg,#0a1628,#1a2a4a)", fontFamily: "monospace", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-      {showEventCutIn && eventCard && (<CardCutIn card={eventCard} cardType="event" onDone={() => { setShowEventCutIn(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
+      {showEventCutIn && eventCard && (<CardCutIn card={eventCard} cardType="event" passive={cutInPassive} onDone={() => { setShowEventCutIn(false); setCutInPassive(false); if (eventCutInDone) { eventCutInDone(); setEventCutInDone(null); } }} />)}
 
       <div style={{ padding: "10px 14px 8px", position: "relative", zIndex: 2, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, alignItems: "center" }}>
