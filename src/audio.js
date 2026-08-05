@@ -24,12 +24,21 @@ export const SE = {
   ultimate: url("nc414749_エネルギー爆発音３選加工済み.mp3"),        // かめはめ波 / 超かめはめ波 / ファイナルフラッシュ
   kiBlast: url("nc414744_ビーム発射音（弱）加工済み.mp3"),           // 気弾
   aura: url("nc414748_エネルギー溜め・増幅音７選加工済み.mp3"),      // 変身後の気のオーラ（ループ）
-  dragonBurst: url("nc432033_DB_ぶつけ合い.mp3"),                    // ドラゴンバーストの打ち合い
+  dragonBurst: url("nc432033_DB_ぶつけ合い.wav"),                    // ドラゴンバーストの打ち合い
 };
 
 const BGM_VOLUME = 0.35;
 const SE_VOLUME = 0.7;
-const AURA_VOLUME = 0.45;
+
+// ---- オーラ音の調整値 ----------------------------------------
+// この音源は実測で
+//   ・先頭0.8秒が完全な無音、そこから0.8秒かけて音が立ち上がる
+//   ・立ち上がったあとは 9.68秒まで平坦（波形の最大値 0.13〜0.18）
+// という作りです。他の効果音は最大 0.35〜0.76 あるので、そのまま鳴らすと
+// 埋もれて聞こえません。無音部分を飛ばし、音量を持ち上げて鳴らします。
+const AURA_LOOP_START = 1.6;  // 立ち上がりきったところから
+const AURA_LOOP_END = 9.4;    // 終わりぎわを避けて折り返す
+const AURA_GAIN = 3.0;        // 0.18 × 3.0 ＝ 0.54。近接音とほぼ同じ大きさ
 
 // ---- 自動再生の解除 ----------------------------------------
 let unlocked = false;
@@ -94,26 +103,65 @@ export function preloadAudio(list) {
 }
 
 // ---- ループする効果音（変身の気のオーラ） --------------------
-let auraEl = null;
+//  <audio> の音量は 1.0 が上限で、この音源はそれでもまだ小さいので
+//  Web Audio でゲインを掛けて鳴らします。無音の頭出しと折り返し位置も
+//  Web Audio なら正確に指定できます。
+let actx = null;
+let auraBuf = null;
+let auraNode = null;
+let auraWanted = false;
+
+function audioCtx() {
+  if (actx) return actx;
+  const C = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
+  if (!C) return null;
+  actx = new C();
+  return actx;
+}
 
 /** オーラの音をループ再生します（既に鳴っていれば何もしません） */
 export function startAuraLoop() {
-  if (typeof Audio === "undefined") return;
-  if (auraEl && !auraEl.paused) return;
-  if (!auraEl) {
-    auraEl = new Audio(SE.aura);
-    auraEl.loop = true;
-    auraEl.volume = AURA_VOLUME;
-  }
-  auraEl.currentTime = 0;
-  safePlay(auraEl, () => { if (auraEl) safePlay(auraEl); });
+  const ctx = audioCtx();
+  if (!ctx) return;
+  auraWanted = true;
+  if (auraNode) return; // すでに鳴っています
+
+  const begin = () => {
+    // 呼ばれてから読み込みが終わるまでの間に止められていたら鳴らしません
+    if (!auraWanted || auraNode || !auraBuf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = auraBuf;
+    src.loop = true;
+    src.loopStart = Math.min(AURA_LOOP_START, auraBuf.duration - 0.1);
+    src.loopEnd = Math.min(AURA_LOOP_END, auraBuf.duration);
+    const gain = ctx.createGain();
+    gain.gain.value = AURA_GAIN;
+    src.connect(gain).connect(ctx.destination);
+    src.start(0, src.loopStart); // 無音の頭出しを飛ばして鳴らし始めます
+    auraNode = { src, gain };
+  };
+
+  const run = () => {
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    if (auraBuf) { begin(); return; }
+    fetch(SE.aura)
+      .then((r) => r.arrayBuffer())
+      .then((b) => ctx.decodeAudioData(b))
+      .then((buf) => { auraBuf = buf; begin(); })
+      .catch(() => { /* 読めなくても進行は止めません */ });
+  };
+
+  run();
+  // 自動再生を止められている場合は、最初のタップでやり直します
+  if (!unlocked && pending.length < 4) pending.push(run);
 }
 
 /** オーラの音を止めます */
 export function stopAuraLoop() {
-  if (!auraEl) return;
-  auraEl.pause();
-  auraEl.currentTime = 0;
+  auraWanted = false;
+  if (!auraNode) return;
+  try { auraNode.src.stop(); } catch { /* 既に止まっている場合は無視 */ }
+  auraNode = null;
 }
 
 // ---- BGM ---------------------------------------------------
