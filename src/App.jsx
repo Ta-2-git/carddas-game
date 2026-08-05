@@ -1036,7 +1036,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const SS3_MUL = [{ hp: 1, atk: 1 }, { hp: 1.5, atk: 1.2 }, { hp: 3, atk: 2 }];
   const [ss3Level, setSS3Level] = useState(0);
   const ss3LevelRef = useRef(0);
-  const winStreakRef = useRef(0);        // じゃんけんの連勝数
   const ss3BaseMaxHpRef = useRef(null);  // 変身前（素）の最大HPとATK
   const ss3BaseAtkRef = useRef(null);
 
@@ -1177,9 +1176,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           flashForTransform(ms + 300);
           if (startsWithSS3) {
             applySS3Level(1);
-            // 「怒り」で既にスーパーサイヤ人なので、次に1回勝てばSS3へ上がるよう
-            // 連勝数を1つ進めた状態から始めます
-            winStreakRef.current = 1;
           } else applySS1Transform();
           T(() => { setZoomPlayerAnim("idle"); }, ms + 50);
           setTimeout(() => setZoomPlayerStatus("⚡ スーパーサイヤ人"), 300);
@@ -1461,13 +1457,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     return 0;
   }, [isSS3Char, playerCard, animateValue]);
 
-  /** じゃんけんに勝ったときに上がる変身段階（0 = 変身しない） */
+  /**
+   * じゃんけんに勝ったときに上がる変身段階（0 = 変身しない）。
+   * 段階が「勝った回数」そのものなので、通常状態から数えれば
+   * 2連勝でスーパーサイヤ人3になります。
+   * 攻撃を受けて1段階戻ったあとや、「怒り」で変身済みで始めた場合も、
+   * その状態から1回勝てば上がります。
+   */
   const nextSS3Level = useCallback(() => {
     if (!isSS3Char) return 0;
     const cur = ss3LevelRef.current;
-    if (cur === 0) return 1;                                  // 1勝でスーパーサイヤ人
-    if (cur === 1 && winStreakRef.current >= 2) return 2;      // 2連勝でスーパーサイヤ人3
-    return 0;
+    return cur >= 2 ? 0 : cur + 1;
   }, [isSS3Char]);
 
   // ---- イベント「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
@@ -1575,8 +1575,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
         const result = applyLoseStreak(judgeJanken(hand, eHand));
-        if (result === "win") winStreakRef.current += 1;
-        else if (result === "lose") winStreakRef.current = 0;
         setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
         setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, 1500);
       }, 600);
@@ -1589,9 +1587,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       setEnemyHand(eHand); setShowSet(false);
       // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
       const result = applyLoseStreak(judgeJanken(hand, eHand));
-      // 連勝数（GokuSS3 の2段階目の条件）
-      if (result === "win") winStreakRef.current += 1;
-      else if (result === "lose") winStreakRef.current = 0;
       setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
       if (result === "draw") {
         setBattleLog(l => [...l, `T${turn}: ドラゴンバースト！！`]);
