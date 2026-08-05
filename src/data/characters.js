@@ -175,17 +175,16 @@ const GOKU_BASE = {
 
 // 変身オーラの共通設定。色だけ差し替えて使います。
 // startFrame は「変身モーション開始から何フレーム目でオーラとモデルを
-// 切り替えるか」。変身モーションを撃ち終えて立ち上がりきった瞬間に
-// 切り替えたいので、モーションの最後（2.8秒 × 30fps = 84フレーム目）に
-// 置いています。実測した素材の姿勢は
-//   素材5.0〜5.2秒 … 気を溜めて両手が腰より上がる（手の高さ +0.06〜0.09）
-//   素材5.4〜5.5秒 … 両手が下りて体が起き、立ち姿に戻る
-// で、5.5秒（＝再生2.8秒）が立ち終わりです。
-// なお切り替えの取りこぼしは CharacterRig 側で受けているので、
-// モーションの最後ちょうどを指定しても確実に切り替わります。
+// 切り替えるか」。再生2.0秒＝30fpsで60フレーム目にしています。
+// 再生は素材5.5秒を2.8秒に詰めているので、2.0秒は素材の3.93秒あたり。
+// 実測した素材の姿勢は
+//   素材4.0〜4.7秒 … 両手を下ろしたまま直立（手の高さは腰とほぼ同じ）
+//   素材5.0〜5.2秒 … 気を溜めて両手が腰より上がる（+0.06〜0.09）
+//   素材5.4〜5.5秒 … 両手が下りて立ち姿に戻る（ここがモーションの最後）
+// なので、気を溜め始める手前で切り替わります。
 const GOKU_AURA = (preset) => ({
   normal:      { enabled: false },
-  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 84, thunder: true },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 60, thunder: true },
   reverted:    { enabled: false },
 });
 
@@ -266,7 +265,7 @@ export const CHARACTERS = {
         // 濃さ（透明度・発光量）はSS1と同じ。色も同じ金色にして、
         // 稲妻だけ強くします
         color: "#ffaa00",
-        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 84, thunder: true,
+        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 60, thunder: true,
         backIntensity: 0.85,   // SS1と同じ
         frontIntensity: 0.13,  // SS1と同じ（上げるとキャラが白飛びします）
         boltIntensity: 0.7,    // 既定0.28 → 稲妻を強く
