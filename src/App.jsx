@@ -3,6 +3,7 @@ import CharacterModel3D from "./three/CharacterModel3D";
 import BattleStage3D from "./three/BattleStage3D";
 import { has3DModel, MOTION, getMotionShotDelay, getMotionPlaySeconds, getPreloadUrls } from "./data/characters";
 import { preload } from "./three/gltfCache";
+import { BGM, SE, playBgm, playSe, preloadAudio, startAuraLoop, stopAuraLoop } from "./audio";
 
 // ===== キャラクター表示（3D/2D自動切り替え） =====
 const CharacterFighter = ({ card, animState, isEnemy = false, size = 110, scale = 1, transformed = false }) => {
@@ -637,13 +638,20 @@ const CoinInsertScreen = ({ coins, onInsert, onBack }) => {
 const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectCard }) => {
   const [phase, setPhase] = useState(0);
   const rar = RARITY_CONFIG[card.rarity];
+  const flipTimers = useRef([]);
+  // 裏面で止めて待ちます。めくるのは利用者がタッチしてからです。
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 300);
-    const t2 = setTimeout(() => setPhase(2), 1200);
-    const t3 = setTimeout(() => setPhase(3), 2200);
-    const t4 = setTimeout(() => setPhase(4), 2800);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    return () => { clearTimeout(t1); flipTimers.current.forEach(clearTimeout); };
   }, []);
+  const flipCard = () => {
+    if (phase !== 1) return; // 二度押しと、めくり終わったあとの押下を無視します
+    setPhase(2);
+    flipTimers.current = [
+      setTimeout(() => setPhase(3), 1000),
+      setTimeout(() => setPhase(4), 1600),
+    ];
+  };
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: `radial-gradient(ellipse at center,${rar.color}22 0%,#000 70%)`, fontFamily: "'Courier New',monospace", padding: 20, overflow: "hidden" }}>
       {phase >= 2 && (
@@ -656,8 +664,10 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
       <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
         {phase >= 1 && (<div style={{ fontSize: 12, color: rar.color, letterSpacing: 4, marginBottom: 20, animation: "fadeInUp 0.5s ease", textShadow: `0 0 20px ${rar.color}` }}>✦ カード排出！ ✦</div>)}
         {phase >= 1 && (
-          <div style={{ perspective: "1000px", marginBottom: 20 }}>
-            <div style={{ width: 220, height: 308, position: "relative", transformStyle: "preserve-3d", transition: phase >= 2 ? "transform 0.9s cubic-bezier(0.4,0,0.2,1)" : "none", transform: phase >= 2 ? "rotateY(180deg)" : "rotateY(0deg)", margin: "0 auto", animation: phase === 1 ? "cardAppear 0.5s cubic-bezier(0.34,1.56,0.64,1)" : "none" }}>
+          <div style={{ perspective: "1000px", marginBottom: 20 }}
+               onClick={flipCard}
+               onTouchEnd={(e) => { e.preventDefault(); flipCard(); }}>
+            <div style={{ width: 220, height: 308, position: "relative", transformStyle: "preserve-3d", transition: phase >= 2 ? "transform 0.9s cubic-bezier(0.4,0,0.2,1)" : "none", transform: phase >= 2 ? "rotateY(180deg)" : "rotateY(0deg)", margin: "0 auto", cursor: phase === 1 ? "pointer" : "default", animation: phase === 1 ? "cardAppear 0.5s cubic-bezier(0.34,1.56,0.64,1)" : "none" }}>
               <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}><CardBack large /></div>
               <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)" }}>
                 <div style={{ width: 220, height: 308, borderRadius: 14, background: card.isGoku ? "linear-gradient(160deg,#1a0500,#2d1000,#1a0800)" : "linear-gradient(160deg,#1a1a2e,#16213e,#0f3460)", border: `3px solid ${rar.color}`, boxShadow: `0 0 40px ${rar.glow}88`, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 6px 6px" }}>
@@ -670,6 +680,9 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
               </div>
             </div>
           </div>
+        )}
+        {phase === 1 && (
+          <div style={{ fontSize: 12, fontWeight: "900", color: rar.color, letterSpacing: 3, marginBottom: 16, animation: "pulse 0.8s infinite", textShadow: `0 0 12px ${rar.glow}` }}>▼ タッチしてカードをめくる</div>
         )}
         {phase >= 3 && (
           <div style={{ animation: "fadeInUp 0.5s ease", background: "rgba(0,0,0,0.7)", border: `1px solid ${rar.color}44`, borderRadius: 12, padding: "14px 20px", maxWidth: 260, margin: "0 auto 16px" }}>
@@ -802,7 +815,12 @@ const CardCutIn = ({ card, cardType, onDone, passive = false }) => {
   );
 };
 
-const SupportCardSelectScreen = ({ ownedSupports, onSelect, onSkip }) => {
+// 「カードを選びなおす」ボタン。ひとつ前の選択画面に戻します。
+const ReselectButton = ({ onClick, label = "← カードを選びなおす" }) => (
+  <button onClick={onClick} style={{ padding: "12px", background: "transparent", border: "1px solid #6b7280", borderRadius: 8, color: "#9ca3af", fontSize: 12, cursor: "pointer", fontFamily: "monospace", letterSpacing: 1 }}>{label}</button>
+);
+
+const SupportCardSelectScreen = ({ ownedSupports, onSelect, onSkip, onReselect }) => {
   const [selected, setSelected] = useState(null);
   const cards = ownedSupports.map(id => SUPPORT_CARDS.find(c => c.id === id)).filter(Boolean);
   return (
@@ -831,12 +849,13 @@ const SupportCardSelectScreen = ({ ownedSupports, onSelect, onSkip }) => {
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px", background: "linear-gradient(0deg,rgba(16,0,5,0.98) 80%,transparent 100%)", display: "flex", flexDirection: "column", gap: 10 }}>
         {selected && (<button onClick={() => onSelect(selected)} style={{ padding: "14px", background: `linear-gradient(135deg,${selected.color},${selected.glow})`, border: "none", borderRadius: 8, color: "#000", fontSize: 14, fontWeight: "900", cursor: "pointer", fontFamily: "monospace", boxShadow: `0 4px 20px ${selected.color}88` }}>✦ このカードを使う</button>)}
         <button onClick={() => onSkip(null)} style={{ padding: "12px", background: "transparent", border: "1px solid #374151", borderRadius: 8, color: "#6b7280", fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>使わずに進む →</button>
+        <ReselectButton onClick={onReselect} label="← キャラクターを選びなおす" />
       </div>
     </div>
   );
 };
 
-const EventCardSelectScreen = ({ ownedEvents, onSelect, onSkip }) => {
+const EventCardSelectScreen = ({ ownedEvents, onSelect, onSkip, onReselect }) => {
   const [selected, setSelected] = useState(null);
   const cards = ownedEvents.map(id => EVENT_CARDS.find(c => c.id === id)).filter(Boolean);
   return (
@@ -866,6 +885,7 @@ const EventCardSelectScreen = ({ ownedEvents, onSelect, onSkip }) => {
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "16px", background: "linear-gradient(0deg,rgba(0,5,10,0.98) 80%,transparent 100%)", display: "flex", flexDirection: "column", gap: 10 }}>
         {selected && (<button onClick={() => onSelect(selected)} style={{ padding: "14px", background: `linear-gradient(135deg,${selected.color},${selected.glow})`, border: "none", borderRadius: 8, color: "#000", fontSize: 14, fontWeight: "900", cursor: "pointer", fontFamily: "monospace", boxShadow: `0 4px 20px ${selected.color}88` }}>✦ このカードを使う</button>)}
         <button onClick={() => onSkip(null)} style={{ padding: "12px", background: "transparent", border: "1px solid #374151", borderRadius: 8, color: "#6b7280", fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>使わずに進む →</button>
+        <ReselectButton onClick={onReselect} label="← サポートカードを選びなおす" />
       </div>
     </div>
   );
@@ -1095,6 +1115,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const ss3BaseAtkRef = useRef(null);
 
   // ---- 気力ゲージ（10メモリ貯まると攻撃力2倍）----
+  const gaveUpRef = useRef(false); // 「あきらめる」を二重に押せないようにする印
+
   const KI_MAX = 10;
   const [kiGauge, setKiGauge] = useState(0);
   const kiGaugeRef = useRef(0);
@@ -1477,7 +1499,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     setTimeout(() => {
       setDragonBurstPhase("clash"); setPlayerAnim("dash"); setEnemyAnim("dash"); setPlayerClashOffset(120); setEnemyClashOffset(-120);
       setTimeout(() => { setClashFlash(true); setTimeout(() => setClashFlash(false), 300); setClashSparks(true); }, 500);
-      setTimeout(() => { setDragonBurstPhase("janken"); setPhase("choose"); setTimer(15); setTimerActive(true); }, 900);
+      // 打ち合いの効果音は、じゃんけんが始まる瞬間に鳴らします
+      setTimeout(() => { playSe(SE.dragonBurst); setDragonBurstPhase("janken"); setPhase("choose"); setTimer(15); setTimerActive(true); }, 900);
     }, 2000);
   }, []);
 
@@ -1532,6 +1555,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     ss1ActiveRef.current = false; setSS1Active(false);
     setBattleLog(l => [...l, `変身解除！ 通常の状態に戻った。`]);
     setTransformShown(false);   // オーラを消し、モデルも通常へ戻る
+    stopAuraLoop();             // オーラが消えるので気の音も止めます
     const ratio = playerHpRef.current / playerMaxHpRef.current;
     const newMax = ss1BaseMaxHpRef.current != null ? ss1BaseMaxHpRef.current : playerCard.hp;
     const newAtk = ss1BaseAtkRef.current != null ? ss1BaseAtkRef.current : playerCard.atk;
@@ -1553,6 +1577,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const lv = Math.max(0, Math.min(2, toLevel));
     const cur = ss3LevelRef.current;
     if (lv === cur) return 0;
+    if (lv === 0) stopAuraLoop(); // 通常に戻るとオーラが消えるので気の音も止めます
     // 素のステータス（サポートカードの強化込み）を最初の変身時に覚えます
     if (ss3BaseMaxHpRef.current == null) {
       ss3BaseMaxHpRef.current = playerMaxHpRef.current;
@@ -1764,10 +1789,25 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   }, []);
 
   // 予約しておいた弾を実際に発射し、着弾を予約します
+  /** 「あきらめる」… その場で敗北にしてリザルトへ進みます */
+  const giveUp = useCallback(() => {
+    if (gaveUpRef.current) return;
+    gaveUpRef.current = true;
+    clearInterval(timerRef.current); setTimerActive(false);
+    stopAuraLoop();
+    setBattleLog(l => [...l, `あきらめた…`]);
+    setPhase("result");
+    setPlayerHp(0); playerHpRef.current = 0; setPlayerDisplayHp(0);
+    setPlayerAnim("lose"); setEnemyAnim("win");
+    setTimeout(() => onEnd(false), 1200);
+  }, [onEnd]);
+
   const firePendingShot = useCallback(() => {
     const p = pendingShotRef.current;
     if (!p) return;
     pendingShotRef.current = null;
+    // 効果音は「エネルギー波／気弾が出た瞬間」に鳴らします
+    playSe(p.kind === "ultimate" ? SE.ultimate : SE.kiBlast);
     setShot({ key: Date.now(), from: "player", kind: p.kind });
     setTimeout(p.onLand, p.travelMs);
   }, []);
@@ -1867,7 +1907,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     if (needsDash) {
       setPlayerAnim("dash"); setEnemyAnim("idle"); setPlayerOffset(160);
       setTimeout(() => { setPlayerAnim("idle"); }, 600);
-      setTimeout(() => { if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); setEnemyAnim("hit"); setDamageNum(dmg); setDamagePos("enemy"); setBattleLog(l => [...l, `T${turn}: ${playerCard.name}の${moveName(move)}！ ${dmg}ダメージ！`]); }, 1100);
+      setTimeout(() => { if (move.id === "scissors_kick") setPlayerAnim("kick"); else setPlayerAnim("punch"); playSe(SE.melee); setEnemyAnim("hit"); setDamageNum(dmg); setDamagePos("enemy"); setBattleLog(l => [...l, `T${turn}: ${playerCard.name}の${moveName(move)}！ ${dmg}ダメージ！`]); }, 1100);
       setTimeout(() => { afterHit("punch", "enemy"); }, 1800);
       return;
     }
@@ -1895,11 +1935,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
       if (is3D) {
         if (isUltimate) setPlayerAnim("beam");
         else if (useKiBlast) setPlayerAnim(MOTION.KI_BLAST);
-        else if (move.id === "scissors_kick") setPlayerAnim("kick");
-        else setPlayerAnim("punch");
+        else if (move.id === "scissors_kick") { setPlayerAnim("kick"); playSe(SE.melee); }
+        else { setPlayerAnim("punch"); playSe(SE.melee); }
       } else setPlayerAnim("attack");
       setEnemyAnim("idle");
-    } else { setEnemyAnim("attack"); setPlayerAnim("idle"); }
+    } else { setEnemyAnim("attack"); playSe(SE.melee); setPlayerAnim("idle"); }
 
     if (shotMotion) {
       // 弾は「モーションが実際に腕を伸ばしきった瞬間」に出します。
@@ -1995,6 +2035,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
           <div />
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {enemyData.atk + atkBonus.enemy}</div>
+            {/* 押すとその場で敗北になります（誤爆しないよう小さめに置いています） */}
+            <button onClick={giveUp} disabled={phase === "result"}
+              style={{ ...BADGE, color: "#9ca3af", background: "rgba(0,0,0,0.45)", border: "1px solid #4b5563", cursor: phase === "result" ? "default" : "pointer", fontFamily: "monospace", opacity: phase === "result" ? 0.4 : 1 }}>あきらめる</button>
           </div>
         </div>
 
@@ -2090,6 +2133,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             shot={shot}
             onShotHit={() => setShot(null)}
             onPlayerShot={handlePlayerShot}
+            onPlayerTransform={() => startAuraLoop()}
           />
 
           {clashSparks && (dragonBurstPhase === "janken" || dragonBurstPhase === "clash") && (
@@ -2314,6 +2358,8 @@ export default function App() {
   // タイトル画面を見ている間に、素体モデルと待機モーションを取っておきます
   // （カード選択で選んだ瞬間にキャラが動き出すようにするため）
   useEffect(() => { preload(getPreloadUrls()); }, []);
+  // 効果音も先に取っておきます（鳴らす瞬間に間に合わせるため）
+  useEffect(() => { preloadAudio([SE.melee, SE.ultimate, SE.kiBlast, SE.aura, SE.dragonBurst]); }, []);
 
   const [screen, setScreen] = useState("title");
   const [coins, setCoins] = useState(500);
@@ -2329,6 +2375,15 @@ export default function App() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [cutInCard, setCutInCard] = useState(null);
   const [cutInAfter, setCutInAfter] = useState(null);
+
+  // 画面に合わせてBGMを切り替えます。(App)
+  // ロビー曲はカード選択まで。VS画面に入ったらバトル曲に切り替わります。
+  useEffect(() => {
+    const battleScreens = ["vs", "battle", "result"];
+    playBgm(battleScreens.includes(screen) ? BGM.battle : BGM.lobby);
+  }, [screen]);
+  // バトル以外ではオーラの音を止めます（変身したまま画面を抜けた場合の保険）
+  useEffect(() => { if (screen !== "battle") stopAuraLoop(); }, [screen]);
 
   const handleCoinInsert = () => {
     setCoins(c => c - 100);
@@ -2420,8 +2475,8 @@ export default function App() {
       {screen === "coin" && <CoinInsertScreen coins={coins} onInsert={handleCoinInsert} onBack={() => setScreen("title")} />}
       {screen === "gacha_result" && gachaCard && (<GachaResultScreen card={gachaCard} mode={gachaMode} onHome={() => setScreen("title")} onBuyAgain={handleBuyAgain} onSelectCard={() => setScreen("select")} />)}
       {screen === "select" && (<CardSelectScreen ownedCards={ownedCards} onSelect={handleCharCardSelect} onBack={() => setScreen("title")} />)}
-      {screen === "support_select" && (<SupportCardSelectScreen ownedSupports={ownedSupports} onSelect={handleSupportSelect} onSkip={handleSupportSelect} />)}
-      {screen === "event_select" && (<EventCardSelectScreen ownedEvents={ownedEvents} onSelect={handleEventSelect} onSkip={handleEventSelect} />)}
+      {screen === "support_select" && (<SupportCardSelectScreen ownedSupports={ownedSupports} onSelect={handleSupportSelect} onSkip={handleSupportSelect} onReselect={() => { setSelectedCard(null); setBattleEnemy(null); setScreen("select"); }} />)}
+      {screen === "event_select" && (<EventCardSelectScreen ownedEvents={ownedEvents} onSelect={handleEventSelect} onSkip={handleEventSelect} onReselect={() => { setSelectedSupport(null); setScreen("support_select"); }} />)}
       {screen === "vs" && selectedCard && battleEnemy && (<VSCutScreen playerCard={selectedCard} enemyData={battleEnemy} onDone={() => setScreen("battle")} />)}
       {screen === "battle" && selectedCard && battleEnemy && (<BattleScreen playerCard={selectedCard} enemyData={battleEnemy} supportCard={selectedSupport} eventCard={selectedEvent} onEnd={won => { if (won) setCoins(c => c + 150); setBattleResult(won); setTimeout(() => setScreen("result"), 500); }} />)}
       {screen === "result" && selectedCard && battleEnemy && (<ResultScreen won={battleResult} playerCard={selectedCard} enemy={battleEnemy} onHome={() => { setBattleResult(null); setSelectedCard(null); setSelectedSupport(null); setSelectedEvent(null); setScreen("title"); }} />)}

@@ -52,7 +52,7 @@ function trimClip(THREE, clip, start, end) {
 }
 
 export default class CharacterRig {
-  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null, onShot = null, preloadAll = false }) {
+  constructor({ cardId, isEnemy = false, onReady = null, facingYDeg = null, onShot = null, onTransformSwap = null, preloadAll = false }) {
     this.THREE = window.THREE;
     this.cardId = cardId;
     this.config = getCharacter(cardId);
@@ -60,6 +60,8 @@ export default class CharacterRig {
     this.onReady = onReady;
     // モーションが「腕を伸ばしきった瞬間」に呼ばれます（弾を出すタイミング）
     this.onShot = onShot;
+    // 変身してオーラとモデルが入れ替わる瞬間に呼ばれます（効果音のタイミング）
+    this.onTransformSwap = onTransformSwap;
     // 対戦画面だけ、待機以外のモーションも先読みします。
     // カード一覧などの表示では待機しか使わないので取りに行きません。
     this.preloadAll = preloadAll;
@@ -700,6 +702,7 @@ export default class CharacterRig {
     this.auraMode = this._wantedAuraMode();
     this._applyAuraVisibility();
     this._applyModelForState();
+    if (this.onTransformSwap) this.onTransformSwap(this.transformLevel || 0);
   }
 
   /** 今の変身段階で表示すべきオーラの種類を返します */

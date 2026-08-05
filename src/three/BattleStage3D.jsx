@@ -94,6 +94,7 @@ export default function BattleStage3D({
   shot = null,          // { key, from: "player"|"enemy", kind: "kiBlast"|"ultimate" }
   onShotHit = null,     // 着弾時に呼ばれます
   onPlayerShot = null,  // 自キャラが腕を伸ばしきった瞬間（弾を出す合図）
+  onPlayerTransform = null, // 自キャラが変身してオーラが出た瞬間
   width = null,         // 未指定なら親要素いっぱいに自動フィット（スマホ/PC両対応）
   height = null,
 }) {
@@ -102,6 +103,8 @@ export default function BattleStage3D({
   // 最新のコールバックを参照できるようにしておきます（rigは作り直さないため）
   const onPlayerShotRef = useRef(onPlayerShot);
   onPlayerShotRef.current = onPlayerShot;
+  const onPlayerTransformRef = useRef(onPlayerTransform);
+  onPlayerTransformRef.current = onPlayerTransform;
 
   // ---------- 初期化（キャラが変わった時だけ） ----------
   useEffect(() => {
@@ -133,6 +136,8 @@ export default function BattleStage3D({
       cardId: playerCardId, isEnemy: false, facingYDeg: 90, preloadAll: true,
       // モーションが腕を伸ばしきった瞬間に呼ばれます
       onShot: (motion) => { if (onPlayerShotRef.current) onPlayerShotRef.current(motion); },
+      // 変身してオーラとモデルが入れ替わった瞬間に呼ばれます
+      onTransformSwap: (lv) => { if (onPlayerTransformRef.current) onPlayerTransformRef.current(lv); },
     });
     const enemyRig = new CharacterRig({ cardId: enemyCardId, isEnemy: true, facingYDeg: -90, preloadAll: true });
     // 立ち位置と大きさは applyLayout で画面比率に合わせて設定します
