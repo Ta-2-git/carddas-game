@@ -145,8 +145,11 @@ export default function BattleStage3D({
 
     // 必殺技の動画エフェクトは、撃つ前に読み込んでおきます
     for (const id of [playerCardId, enemyCardId]) {
-      const u = (getCharacter(id).ultimate || {}).video;
-      if (u) preloadShotVideo(u);
+      const c = getCharacter(id);
+      // 段階ごとに必殺技が変わるキャラは、その分もまとめて読み込みます
+      for (const s of [c.ultimate, ...Object.values(c.ultimateByLevel || {})]) {
+        if (s && s.video) preloadShotVideo(s.video);
+      }
     }
 
     const clock = new THREE.Clock();
@@ -449,7 +452,14 @@ function spawnShot(S, shot) {
   const fromPlayer = shot.from === "player";
   const cardId = fromPlayer ? S.playerRig.cardId : S.enemyRig.cardId;
   const cfg = getCharacter(cardId);
-  const spec = shot.kind === "ultimate" ? cfg.ultimate : cfg.kiBlast;
+  let spec = shot.kind === "ultimate" ? cfg.ultimate : cfg.kiBlast;
+  // 多段変身のキャラは、変身の段階ごとに必殺技を差し替えられます
+  // （GokuSS3 はスーパーサイヤ人3のときだけ「超かめはめ波」）
+  if (shot.kind === "ultimate" && cfg.ultimateByLevel) {
+    const rig = fromPlayer ? S.playerRig : S.enemyRig;
+    const lv = (rig && rig.transformLevel) || 0;
+    if (cfg.ultimateByLevel[lv]) spec = cfg.ultimateByLevel[lv];
+  }
   if (!spec || spec.effect === "none") {
     if (shot.onDone) shot.onDone();
     return;

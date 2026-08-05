@@ -141,9 +141,10 @@ const GOKU_BASE = {
       ultimate: { file: `${R2}/Goku_Kamehameha.fbx`, loop: false, trimEnd: 6.5, duration: 3.0, faceCamera: true, shotAt: 4.7 },
 
       // 素材8.3秒。3.0秒で気が爆発して立ち上がる（腰が0.73→0.78に上がる）。
-      // 5.5秒までを2秒に詰めて全フレーム再生する。
+      // 5.5秒までを再生します。以前は2.0秒に詰めていましたが、モデルの
+      // 切り替えを遅らせたいので2.8秒（約1.96倍速）までゆるめました。
       // hold は付けません（再生後は待機へ戻す。オーラは別管理なので消えません）
-      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 5.5, duration: 2.0, faceCamera: true },
+      transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 5.5, duration: 2.8, faceCamera: true },
 
       hitByMelee:    { file: `${R2}/Goku_Receive.fbx`, loop: false },
       hitByKiBlast:  { file: "", loop: false },
@@ -176,11 +177,12 @@ const GOKU_BASE = {
 // startFrame は「変身モーション開始から何フレーム目でオーラとモデルを
 // 切り替えるか」。実測では素材5.0秒から頭が持ち上がり（頭の高さ -0.5 →
 // 5.1秒で0.6 → 5.25秒で1.9）、少し上を向く姿勢になります。
-// 5.5秒を2秒に詰めた再生（2.75倍速）では 5.25/2.75 = 1.91秒 ＝ 57フレーム目。
-// モーション全体が2秒なので、これが実質いちばん遅らせられる位置です。
+// 5.5秒を2.8秒に詰めた再生（約1.96倍速）では 5.25/1.96 = 2.67秒 ＝ 80フレーム目。
+// モーション全体が2.8秒なので、ここが実質いちばん遅らせられる位置です
+// （以前は2秒再生の57フレーム＝1.91秒だったので、0.76秒遅くなります）。
 const GOKU_AURA = (preset) => ({
   normal:      { enabled: false },
-  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 57, thunder: true },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 80, thunder: true },
   reverted:    { enabled: false },
 });
 
@@ -261,21 +263,26 @@ export const CHARACTERS = {
         // 濃さ（透明度・発光量）はSS1と同じ。色も同じ金色にして、
         // 稲妻だけ強くします
         color: "#ffaa00",
-        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 57, thunder: true,
+        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 80, thunder: true,
         backIntensity: 0.85,   // SS1と同じ
         frontIntensity: 0.13,  // SS1と同じ（上げるとキャラが白飛びします）
         boltIntensity: 0.7,    // 既定0.28 → 稲妻を強く
         boltLayers: 2,         // 位相のずれた稲妻を重ねて密度を上げる
       },
     },
-    ultimate: {
-      ...GOKU_BASE.ultimate,
-      video: "/kamehameha_super.mp4",
-      videoDuration: 2.58,   // 実測 2.578秒 / 1920x1080 / 約30fps
-      videoHeightMul: 1.5,   // 「超」らしく、通常のかめはめ波より縦を1.5倍に
-      // 通常のかめはめ波は先頭3コマが黒（0.1秒）ですが、こちらは黒コマが
-      // 1つだけなので、その分だけ飛ばします（フレームの圧縮サイズから判定）。
-      videoStartAt: 0.035,
+    // 必殺技は変身の段階で変わります。
+    //   通常・スーパーサイヤ人 … 普通のかめはめ波（ultimate）
+    //   スーパーサイヤ人3      … 超かめはめ波（ultimateByLevel[2]）
+    ultimateByLevel: {
+      2: {
+        ...GOKU_BASE.ultimate,
+        video: "/kamehameha_super.mp4",
+        videoDuration: 2.58,   // 実測 2.578秒 / 1920x1080 / 約30fps
+        videoHeightMul: 1.5,   // 「超」らしく、通常のかめはめ波より縦を1.5倍に
+        // 通常のかめはめ波は先頭3コマが黒（0.1秒）ですが、こちらは黒コマが
+        // 1つだけなので、その分だけ飛ばします（フレームの圧縮サイズから判定）。
+        videoStartAt: 0.035,
+      },
     },
   },
 

@@ -46,7 +46,11 @@ export default function CharacterModel3D({
     dir.position.set(2, 4, 3);
     scene.add(dir);
 
-    const rig = new CharacterRig({ cardId, isEnemy });
+    // 単体表示（カード紹介・ステータス表示・VS画面）では、敵でも
+    // こちらを向かせます。isEnemy をそのまま渡すと180度回って後ろ姿に
+    // なるため、facingYDeg で自キャラと同じ向きに固定します。
+    // （対戦画面は BattleStage3D 側が向かい合う向きを指定します）
+    const rig = new CharacterRig({ cardId, isEnemy, facingYDeg: cam.rotationY || 0 });
     scene.add(rig.root);
     rig.load();
 

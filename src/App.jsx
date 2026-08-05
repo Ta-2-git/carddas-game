@@ -530,6 +530,12 @@ const GUARD_REDUCTION = { none: 0, low: 0.15, mid: 0.30, high: 0.50 };
 const GUARD_LABEL = { none: "0%軽減", low: "15%軽減", mid: "30%軽減", high: "50%軽減" };
 const GUARD_COLOR = { none: "#374151", low: "#3b82f6", mid: "#8b5cf6", high: "#f59e0b" };
 
+// 攻撃ルーレットの目。special＝必殺技（気力ゲージMAXのときだけ出ます）、
+// power＝攻撃力アップ（気力が満タンでないときの必殺技の目の代わり）。
+const ATK_SLOT_COLOR = { special: "#ef4444", power: "#f59e0b", normal: "#1e293b" };
+const ATK_SLOT_TEXT  = { special: "必殺技！", power: "攻撃力アップ", normal: "ノーマル" };
+const ATK_SLOT_BADGE = { special: "💥 必殺技！", power: "⚡ 攻撃力アップ！", normal: "ノーマル" };
+
 const RouletteWheel = ({ slots, currentIdx, isAttack, lv, onTap, stopped, result, size = 260 }) => {
   const N = slots.length;
   const scale = size / 260;
@@ -537,7 +543,7 @@ const RouletteWheel = ({ slots, currentIdx, isAttack, lv, onTap, stopped, result
   const cx = Math.round(130 * scale), cy = Math.round(130 * scale);
   const getColor = (type, isActive) => {
     if (isActive) return "#ffffff";
-    if (isAttack) return type === "special" ? "#ef4444" : "#1e293b";
+    if (isAttack) return ATK_SLOT_COLOR[type] || "#1e293b";
     return { high: "#f59e0b", mid: "#8b5cf6", low: "#3b82f6", none: "#1e293b" }[type] || "#1e293b";
   };
   return (
@@ -567,8 +573,8 @@ const RouletteWheel = ({ slots, currentIdx, isAttack, lv, onTap, stopped, result
           <circle cx={cx} cy={cy} r={r - 2} fill="rgba(0,0,0,0.88)" stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
           <polygon points={`${cx},${cy - R + 6} ${cx - 8},${cy - R - 8} ${cx + 8},${cy - R - 8}`} fill={isAttack ? "#ef4444" : "#3b82f6"} style={{ filter: `drop-shadow(0 0 5px ${isAttack ? "#ef4444" : "#3b82f6"})` }} />
           {stopped && result ? (
-            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill={isAttack ? (result === "special" ? "#ef4444" : "#9ca3af") : (GUARD_COLOR[result] || "#9ca3af")} fontSize={isAttack ? 13 : 11} fontWeight="900" fontFamily="monospace">
-              {isAttack ? (result === "special" ? "必殺技！" : "ノーマル") : GUARD_LABEL[result]}
+            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill={isAttack ? (ATK_SLOT_COLOR[result] === "#1e293b" ? "#9ca3af" : ATK_SLOT_COLOR[result] || "#9ca3af") : (GUARD_COLOR[result] || "#9ca3af")} fontSize={isAttack ? 13 : 11} fontWeight="900" fontFamily="monospace">
+              {isAttack ? (ATK_SLOT_TEXT[result] || "ノーマル") : GUARD_LABEL[result]}
             </text>
           ) : (
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.5)" fontSize={12} fontWeight="900" fontFamily="monospace">TAP !</text>
@@ -969,7 +975,8 @@ const DragonBurstDecideScreen = ({ data }) => {
   const playerWins = winner === "player";
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 60, fontFamily: "'Courier New',monospace", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, #1a0500 0%, #000 70%)", animation: "pulse 0.2s infinite" }} />
+      {/* 背景は点滅させません（目がちらつくため） */}
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, #1a0500 0%, #000 70%)" }} />
       <div style={{ position: "absolute", top: "8%", left: 0, right: 0, textAlign: "center", zIndex: 2 }}>
         <div style={{ display: "inline-block", background: "linear-gradient(135deg,#78350f,#f59e0b,#fbbf24,#f59e0b,#78350f)", padding: "6px 24px", borderRadius: 4, animation: "goldShine 0.8s infinite" }}>
           <span style={{ fontSize: 11, fontWeight: "900", color: "#000", letterSpacing: 4 }}>🔥 ATK × 2.0 — 200%到達！ 🔥</span>
@@ -997,6 +1004,8 @@ const DragonBurstDecideScreen = ({ data }) => {
 const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) => {
   // is3D … 3Dモデルとモーションを持つキャラ（悟空系は isGoku が同じ意味）
   const is3D = Boolean(playerCard.isGoku || playerCard.is3D);
+  // 敵も3Dモデルを持つか（持つ場合は攻撃モーションを最後まで再生させます）
+  const enemyIs3D = has3DModel(enemyData.id);
   // 界王拳を使うのは No.001 孫悟空だけ。変身するキャラは界王拳にしません
   const usesKaioken = Boolean(playerCard.isGoku) && !playerCard.isGokuSS1 && !playerCard.isGokuSS3;
   /** 必殺技の名前はキャラごとに差し替えられます（ベジータならファイナルフラッシュ） */
@@ -1115,6 +1124,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     bump(kiGaugeRef, setKiGauge, kiFullRef, setKiFull, playerAttacked, "自分");
     bump(enemyKiGaugeRef, setEnemyKiGauge, enemyKiFullRef, setEnemyKiFull, !playerAttacked, enemyData.name);
   }, [enemyData]);
+  /** 気力ゲージを指定した量だけ増やします（気力全開チャンスの勝利ボーナス用） */
+  const gainKi = useCallback((amount) => {
+    if (kiFullRef.current) return;
+    const next = Math.min(KI_MAX, kiGaugeRef.current + amount);
+    kiGaugeRef.current = next; setKiGauge(next);
+    setBattleLog(l => [...l, `気力ゲージ +${amount}！`]);
+    if (next >= KI_MAX) {
+      kiFullRef.current = true; setKiFull(true);
+      setBattleLog(l => [...l, `自分の気力が満ちた！ 攻撃力2倍！`]);
+    }
+  }, []);
   /** 気力ゲージによる攻撃力の倍率 */
   const kiMul = useCallback(() => (kiFullRef.current ? 2 : 1), []);
   const enemyKiMul = useCallback(() => (enemyKiFullRef.current ? 2 : 1), []);
@@ -1344,12 +1364,21 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
     const t = setTimeout(() => {
       const { atkResult, defResult, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, attacker, isFirstWin, ss1Win, ss3Win } = rouletteState;
       const isSpecial = atkResult === "special";
+      const isPower = atkResult === "power";
       let move;
       if (isSpecial) { move = attacker === "player" ? (is3D ? MOVES.rock_kamehameha : MOVES.rock_punch) : MOVES.rock_punch; }
       else { move = (pendingMove && pendingMove.id === "rock_kamehameha") ? (attacker === "player" ? MOVES.paper_punch : MOVES.rock_punch) : pendingMove; }
-      // 通常攻撃は技の種類によらず一律 ATK×1.0〜1.3倍、必殺技は一律 ATK×2.5倍。
-      // 必殺技かどうかは技名ではなく、攻撃ルーレットの結果で決まります。
-      const powerMul = isSpecial ? 2.5 : (1.0 + Math.random() * 0.3);
+      // 倍率は攻撃ルーレットの結果で決まります（技名では決まりません）。
+      //   必殺技       … 2.5倍。ただしスーパーサイヤ人3のときだけ4倍
+      //   攻撃力アップ … 1.3〜1.5倍
+      //   ノーマル     … 1.0〜1.3倍
+      // 変身は攻撃の直前に行われるので、段階は「これから変身する分」を見ます。
+      const ss3LvAtAttack = (attacker === "player" && ss3Win) ? ss3Win : ss3LevelRef.current;
+      const ultMul = (attacker === "player" && isSS3Char && ss3LvAtAttack >= 2) ? 4 : 2.5;
+      const powerMul = isSpecial ? ultMul
+                     : isPower ? (1.3 + Math.random() * 0.2)
+                     : (1.0 + Math.random() * 0.3);
+      if (isPower) setBattleLog(l => [...l, `攻撃力アップ！ ATK×${powerMul.toFixed(2)}`]);
       const rawDmg = Math.max(1, Math.floor(pendingBaseAtk * powerMul));
       const reduction = GUARD_REDUCTION[defResult] || 0;
       const finalDmg = Math.max(1, Math.floor(rawDmg * (1 - reduction)));
@@ -1384,7 +1413,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
   const startAttackRoulette = useCallback((attacker, pendingMove, pendingBaseAtk, pendingHand, pendingEHand, pendingIsKaioken, isFirstWin, ss1Win = false, ss3Win = 0) => {
     const atkLv = attacker === "player" ? atkRouletteLevelRef.current : enemyAtkRouletteLevelRef.current;
     const defLv = attacker === "player" ? enemyDefRouletteLevelRef.current : defRouletteLevelRef.current;
-    const atkSlots = buildAttackSlots(atkLv);
+    // 必殺技は気力ゲージが満タンのときだけ出せます。
+    // 満タンでないあいだ、必殺技の目は「攻撃力アップ」の目に置き換わります
+    // （目の数と位置は変えないので、当たりやすさは変わりません）。
+    const kiReady = attacker === "player" ? kiFullRef.current : enemyKiFullRef.current;
+    const atkSlots = buildAttackSlots(atkLv).map(s => (s === "special" && !kiReady) ? "power" : s);
     const defSlots = buildGuardSlots(defLv);
     atkIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
     defIdxRef.current = Math.floor(Math.random() * ROULETTE_TOTAL);
@@ -1420,6 +1453,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             clearInterval(kiryokuTimerRef.current); clearInterval(enemySmashRef.current);
             const pct = playerMeterRef.current, ect = enemyMeterRef.current;
             const newBonus = { player: pct >= ect ? 100 : 30, enemy: pct >= ect ? 30 : 100 };
+            // 勝ったら気力ゲージを3メモリ増やします
+            if (pct >= ect) gainKi(3);
             setAtkBonus(newBonus); setShowAtkBonus(true); setKiryokuPhase("result_show");
             setTimeout(() => { setShowAtkBonus(false); setKiryokuPhase(null); onDone(newBonus); }, 2000);
             return 0;
@@ -1428,7 +1463,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
         });
       }, 1000);
     }, 3000);
-  }, []);
+  }, [gainKi]);
 
   const handleKiryokuTap = useCallback(() => {
     if (kiryokuPhase !== "smash") return;
@@ -1843,7 +1878,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
 
     const landHit = () => {
       if (attacker === "player") setEnemyAnim("hit");
-      else { setEnemyAnim("idle"); setPlayerAnim("hit"); playerHitStartRef.current = performance.now(); }
+      else {
+        // 敵が3Dのときは待機に戻しません。ここで戻すと近接コンボ
+        // （パンチ2発→膝蹴り→キック）がパンチ2発で切れてしまいます。
+        // 1回再生のモーションなので、放っておけば最後まで再生されて
+        // 自動的に待機へ戻ります。
+        if (!enemyIs3D) setEnemyAnim("idle");
+        setPlayerAnim("hit"); playerHitStartRef.current = performance.now();
+      }
       setDamageNum(dmg); setDamagePos(attacker === "player" ? "enemy" : "player");
       setBattleLog(l => [...l, `T${turn}: ${attacker === "player" ? playerCard.name : enemyData.name}の${moveName(move)}！ ${dmg}ダメージ！`]);
       afterHit(attacker === "player" ? "attack" : "hit", attacker === "player" ? "enemy" : "player");
@@ -2039,11 +2081,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
             playerCardId={playerCard.id}
             enemyCardId={enemyData.id}
             playerAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : playerAnim}
-            enemyAnim={dragonBurstPhase === "janken" ? "idle" : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
+            enemyAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
             playerTransformed={transformShown}
             playerTransformLevel={isSS3Char ? ss3Level : null}
             enemyTransformed={false}
             playerAnimLoop={dragonBurstPhase === "janken"}
+            enemyAnimLoop={dragonBurstPhase === "janken"}
             shot={shot}
             onShotHit={() => setShot(null)}
             onPlayerShot={handlePlayerShot}
@@ -2142,7 +2185,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, onEnd }) 
                   <RouletteWheel slots={slots} currentIdx={idx} isAttack={isAttack} lv={lv} stopped={stopped} result={result} onTap={canTap ? onTap : () => {}} size={rouletteWheelSize} />
                 </div>
                 {canTap && <div style={{ fontSize: 9, fontWeight: "900", color: accentColor, letterSpacing: 2, animation: "pulse 0.5s infinite", zIndex: 1 }}>▼ タップして止める！</div>}
-                {stopped && result && <div style={{ fontSize: 11, fontWeight: "900", color: isAttack ? (result === "special" ? "#ef4444" : "#9ca3af") : (GUARD_COLOR[result] || "#9ca3af"), animation: "scaleIn 0.3s ease", letterSpacing: 1, zIndex: 1 }}>{isAttack ? (result === "special" ? "💥 必殺技！" : "ノーマル") : `🛡️ ${GUARD_LABEL[result]}`}</div>}
+                {stopped && result && <div style={{ fontSize: 11, fontWeight: "900", color: isAttack ? (ATK_SLOT_COLOR[result] === "#1e293b" ? "#9ca3af" : ATK_SLOT_COLOR[result] || "#9ca3af") : (GUARD_COLOR[result] || "#9ca3af"), animation: "scaleIn 0.3s ease", letterSpacing: 1, zIndex: 1 }}>{isAttack ? (ATK_SLOT_BADGE[result] || "ノーマル") : `🛡️ ${GUARD_LABEL[result]}`}</div>}
               </div>
             );
           })}
