@@ -185,6 +185,44 @@ const GOKU_AURA = (preset) => ({
 });
 
 // =============================================================
+//  ベジータの共通設定
+// =============================================================
+//  boneFix は「素体ごとの骨の向きのズレ」を打ち消す補正です。
+//  悟空のモーションは骨の回転をそのまま書き込むので、素体側の
+//  バインド姿勢（メッシュと骨の位置関係）が悟空とずれていると、
+//  その分だけ見た目がずれます。実測した頭の骨のズレは
+//    vegeta.glb      … 悟空より +49.43度（X軸まわり＝上下の傾き）
+//    vegeta_ssj.glb  … 悟空より -29.84度
+//  で、これが「頭だけ少し上を向く」原因でした。
+//  値は「悟空の頭とまったく同じ見え方になる回転」を計算したもので、
+//  検算した残差は0.0002度です。腕の骨も悟空と80〜97度ずれていますが、
+//  そちらは骨の軸まわりのねじれ（ロール）なので見た目には出ません。
+const VEGETA_BASE = {
+  ...GOKU_BASE,
+  name: "ベジータ",
+  model: `${R2}/vegeta.glb`,
+  boneFix: {
+    normal:      { Head: [0.418088, 0.000797, -0.005802, 0.908388] },
+    transformed: { Head: [-0.257521, 0.004315, -0.003960, 0.966255] },
+  },
+  motions: {
+    ...GOKU_BASE.motions,
+    // ファイナルフラッシュ。実測で素材2.867秒、2.0秒で腕が伸びきって
+    // 両手首が合わさる（手首間 40→4.7）。そこから先は同じ姿勢のままなので
+    // 2.6秒までを2.2秒に詰めて再生します。
+    ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
+  },
+  // かめはめ波の動画を流用し、色だけ金色に塗り替えて使います。
+  // videoTint は「白い芯は白のまま、色のついた部分だけこの色にする」指定です。
+  ultimate: {
+    ...GOKU_BASE.ultimate,
+    color: "#ffcc33",
+    videoTint: "#ffb300",
+    videoTintAmount: 1.0,
+  },
+};
+
+// =============================================================
 //  キャラクター本体
 // =============================================================
 export const CHARACTERS = {
@@ -242,28 +280,20 @@ export const CHARACTERS = {
   },
 
   // ---------------- No.004 VegetaSS1（じゃんけん勝利でスーパーサイヤ人） ----------------
-  // 基本モーションはNo.001と共通。素体・変身後モデルと必殺技だけ差し替えます。
   c011: {
-    ...GOKU_BASE,
+    ...VEGETA_BASE,
     name: "VegetaSS1",
-    model: `${R2}/vegeta.glb`,
     transformedModel: `${R2}/vegeta_ssj.glb`,
-    motions: {
-      ...GOKU_BASE.motions,
-      // ファイナルフラッシュ。実測で素材2.867秒、2.0秒で腕が伸びきって
-      // 両手首が合わさる（手首間 40→4.7）。そこから先は同じ姿勢のままなので
-      // 2.6秒までを2.2秒に詰めて再生します。
-      ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
-    },
-    // かめはめ波の動画を流用し、色だけ金色に塗り替えて使います。
-    // videoTint は「白い芯は白のまま、色のついた部分だけこの色にする」指定です。
-    ultimate: {
-      ...GOKU_BASE.ultimate,
-      color: "#ffcc33",
-      videoTint: "#ffb300",
-      videoTintAmount: 1.0,
-    },
     aura: GOKU_AURA(AURA_PRESETS.gold),
+  },
+
+  // ---------------- 敵役のベジータ（変身なし） ----------------
+  // 見た目とモーションは c011 と同じ。BattleStage3D 側で敵は
+  // facingYDeg = -90 になるので、自キャラと向かい合う形になります。
+  e004: {
+    ...VEGETA_BASE,
+    name: "ベジータ",
+    aura: { normal: { enabled: false }, transformed: { enabled: false }, reverted: { enabled: false } },
   },
 
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------

@@ -73,6 +73,7 @@ export default class CharacterRig {
     this.actions = {};        // motionName -> AnimationAction
     this.current = null;      // 再生中の motion 名
     this.currentAction = null;
+    this._boneFixes = [];     // 素体ごとの骨の向きのズレを打ち消す補正
 
     this.auraMeshes = {};     // "normal" | "transformed" | "reverted" -> Object3D
     this.auraMode = "normal";
@@ -220,6 +221,47 @@ export default class CharacterRig {
       if (!this._hipsBone && o.name === "Hips") this._hipsBone = o;
       if (!this._headBone && o.name === "Head") this._headBone = o;
     });
+    this._collectBoneFixes();
+  }
+
+  /**
+   * 素体ごとの「骨の向きのズレ」を打ち消す補正を集めます。
+   * 設定は characters.js の boneFix（素体の種類ごとに骨名→クォータニオン）。
+   * モーションは骨の回転をそのまま書き込むので、素体側のバインド姿勢が
+   * 基準（悟空）とずれているとその分だけ見た目がずれます。
+   */
+  _collectBoneFixes() {
+    const THREE = this.THREE;
+    this._boneFixes = [];
+    const table = (this.config.boneFix || {})[this._activeKey];
+    if (!table || !this.model) return;
+    this.model.traverse((o) => {
+      if (!o.isBone) return;
+      const q = table[o.name];
+      if (!q) return;
+      this._boneFixes.push({
+        bone: o,
+        fix: new THREE.Quaternion(q[0], q[1], q[2], q[3]),
+        last: new THREE.Quaternion(),
+        wrote: false,
+      });
+    });
+  }
+
+  /**
+   * モーションが書き込んだ回転に補正を掛けます（毎フレーム、mixerの直後）。
+   * 掛けたあとの値を覚えておき、次のフレームでそれと同じなら
+   * 「モーション側がその骨を動かしていない」と判断して掛け直しません。
+   * こうしないと、頭のトラックを持たないモーションで回り続けてしまいます。
+   */
+  _applyBoneFixes() {
+    if (!this._boneFixes || !this._boneFixes.length) return;
+    for (const f of this._boneFixes) {
+      if (f.wrote && f.bone.quaternion.equals(f.last)) continue;
+      f.bone.quaternion.multiply(f.fix);
+      f.last.copy(f.bone.quaternion);
+      f.wrote = true;
+    }
   }
 
   /** 変身後のモデルを裏で読み込んでおきます（key: transformed / transformed2） */
@@ -653,6 +695,7 @@ export default class CharacterRig {
   update(dt) {
     if (this.disposed) return;
     if (this.mixer) this.mixer.update(dt);
+    this._applyBoneFixes();
 
     // --- 向きをなめらかに変える ---
     // 必殺技や気弾は素体の向きが変わるので、切り替え時に一瞬で

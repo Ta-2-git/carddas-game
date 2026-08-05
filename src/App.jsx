@@ -142,11 +142,17 @@ const GOTENKS_CARD = {
   description: "フュージョン！ジャンケン勝利でSSJ→SSJ3へ変身！負けると1段階ずつ解除。",
 };
 
+// 先頭が既定の対戦相手です（DEFAULT_ENEMY_ID で固定して出します）。
+// e004 は3Dモデル持ちのベジータで、キャラ設定は characters.js 側にあります。
 const ENEMIES = [
+  { id: "e004", name: "ベジータ", hp: 2300, atk: 400, rock: "rock_punch", scissors: "scissors_kick", paper: "paper_punch", color: "#3b82f6" },
   { id: "e001", name: "ザコ戦士",        hp: 1800, atk: 200, rock: "rock_punch", scissors: "scissors_slash", paper: "paper_beam", color: "#6b7280" },
   { id: "e002", name: "強敵！レッド将軍", hp: 2600, atk: 320, rock: "rock_punch", scissors: "scissors_slash", paper: "paper_beam", color: "#ef4444" },
   { id: "e003", name: "魔人ダーク",       hp: 3200, atk: 420, rock: "rock_punch", scissors: "scissors_slash", paper: "paper_beam", color: "#8b5cf6" },
 ];
+
+// 対戦相手は当面ベジータで固定します（ランダムに戻すときはここを null に）
+const DEFAULT_ENEMY_ID = "e004";
 
 const INITIAL_OWNED = ["c001", "c003", "c006", "c007", "c008", "c009", "c010", "c011"];
 
@@ -2306,7 +2312,12 @@ export default function App() {
     setTimeout(() => { setGachaCard(card); if (!ownedCards.includes(card.id)) setOwnedCards(o => [...o, card.id]); }, 50);
   };
 
-  const handleCharCardSelect = (card) => { setSelectedCard(card); setBattleEnemy(ENEMIES[Math.floor(Math.random() * ENEMIES.length)]); setScreen("support_select"); };
+  const handleCharCardSelect = (card) => {
+    const fixed = DEFAULT_ENEMY_ID ? ENEMIES.find(e => e.id === DEFAULT_ENEMY_ID) : null;
+    setSelectedCard(card);
+    setBattleEnemy(fixed || ENEMIES[Math.floor(Math.random() * ENEMIES.length)]);
+    setScreen("support_select");
+  };
   const handleSupportSelect = (card) => { setSelectedSupport(card); setScreen("event_select"); };
   const handleEventSelect = (card) => { setSelectedEvent(card); setScreen("vs"); };
 
