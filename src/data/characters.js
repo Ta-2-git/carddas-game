@@ -172,11 +172,13 @@ const GOKU_BASE = {
 };
 
 // 変身オーラの共通設定。色だけ差し替えて使います。
-// startFrame は「変身モーション開始から何フレーム目で出すか」。
-// 気が爆発するのは素材の3.0秒。2秒に詰めた再生では約1.09秒＝33フレーム目です。
+// startFrame は「変身モーション開始から何フレーム目でオーラとモデルを
+// 切り替えるか」。実測では素材3.0秒で両手を振り下ろし始め、4.5秒まで
+// 下ろしたままなので、下ろしきった3.7秒あたりで切り替えます。
+// 5.5秒を2秒に詰めた再生（2.75倍速）では 3.7/2.75 = 1.35秒 ＝ 40フレーム目。
 const GOKU_AURA = (preset) => ({
   normal:      { enabled: false },
-  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 33, thunder: true },
+  transformed: { enabled: true, ...preset, scale: 1.0, opacity: 0.90, yOffset: 0, startFrame: 40, thunder: true },
   reverted:    { enabled: false },
 });
 
