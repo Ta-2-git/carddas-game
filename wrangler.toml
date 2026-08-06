@@ -1,4 +1,0 @@
-[build]
-  command = "npm install && npm run build"
-  publish = "dist"
-pages_build_output_dir = "dist"

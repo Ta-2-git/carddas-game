@@ -86,6 +86,19 @@ function armUnlock() {
     window.removeEventListener("pointerdown", fire);
     window.removeEventListener("keydown", fire);
     window.removeEventListener("touchstart", fire);
+    // スマホは「画面を触った瞬間」でないと音の器を起こせません。
+    // ここで起こしておけば、以降は攻撃の途中でも効果音を鳴らせます。
+    const ctx = audioCtx();
+    if (ctx) {
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      // iOS は無音を一度鳴らさないと起きないことがあるため、空の音を出します
+      try {
+        const s = ctx.createBufferSource();
+        s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        s.connect(ctx.destination);
+        s.start(0);
+      } catch { /* 起こせなくても進行は止めません */ }
+    }
     while (pending.length) {
       const retry = pending.shift();
       try { retry(); } catch { /* 鳴らせなくても進行は止めません */ }
@@ -109,45 +122,87 @@ function safePlay(el, retry) {
 }
 
 // ---- 効果音 ------------------------------------------------
-// 同じ音が重なって鳴らせるよう、元になる要素を複製して使います
-const seCache = new Map();
+//  スマホ（特にiOS）は、画面を触った直後以外に new Audio().play() を
+//  呼んでも鳴りません。効果音は攻撃やルーレットの途中で鳴らすので、
+//  そのままだと鳴ったり鳴らなかったりします。
+//  そこで効果音は Web Audio で鳴らします。最初のタップで音の器
+//  （AudioContext）を一度起こしておけば、あとはいつでも鳴らせます。
+//  Web Audio が使えない環境では <audio> に切り替えます。
+const seBuffers = new Map();   // URL -> AudioBuffer
+const seLoading = new Map();   // URL -> Promise
+const seFallback = new Map();  // URL -> HTMLAudioElement（Web Audioが使えない時）
 
-function baseAudio(src) {
-  let el = seCache.get(src);
-  if (!el) {
-    el = new Audio(src);
-    el.preload = "auto";
-    seCache.set(src, el);
+function loadSeBuffer(src) {
+  const ctx = audioCtx();
+  if (!ctx) return null;
+  if (seBuffers.has(src)) return Promise.resolve(seBuffers.get(src));
+  if (seLoading.has(src)) return seLoading.get(src);
+  const p = fetch(src)
+    .then((r) => r.arrayBuffer())
+    .then((b) => ctx.decodeAudioData(b))
+    .then((buf) => { seBuffers.set(src, buf); seLoading.delete(src); return buf; })
+    .catch(() => { seLoading.delete(src); return null; });
+  seLoading.set(src, p);
+  return p;
+}
+
+function playSeBuffer(src, vol, opt) {
+  const ctx = audioCtx();
+  const buf = seBuffers.get(src);
+  if (!ctx || !buf) return false;
+  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  const node = ctx.createBufferSource();
+  node.buffer = buf;
+  const gain = ctx.createGain();
+  gain.gain.value = vol;
+  node.connect(gain).connect(ctx.destination);
+  // 長い素材は途中で切ります（最後を小さくして、ぷつっと切れないように）
+  if (opt.maxMs) {
+    const t = ctx.currentTime;
+    const end = opt.maxMs / 1000;
+    const fade = Math.min(0.25, end * 0.5);
+    gain.gain.setValueAtTime(vol, t + end - fade);
+    gain.gain.linearRampToValueAtTime(0.0001, t + end);
+    node.start(0);
+    node.stop(t + end);
+  } else {
+    node.start(0);
   }
-  return el;
+  return true;
 }
 
 /** 効果音を1回鳴らします */
 export function playSe(src, volume = null) {
-  if (!src || typeof Audio === "undefined") return;
+  if (!src) return;
   const opt = SE_OPTIONS[src] || {};
-  const el = baseAudio(src).cloneNode();
-  el.volume = Math.min(1, volume != null ? volume : (opt.volume != null ? opt.volume : SE_VOLUME));
-  safePlay(el);
-  // 長い素材は途中で切ります（最後だけ小さくして、ぷつっと切れないように）
-  if (opt.maxMs) {
-    const fade = 250;
-    setTimeout(() => {
-      const from = el.volume;
-      const t0 = Date.now();
-      const id = setInterval(() => {
-        const p = (Date.now() - t0) / fade;
-        el.volume = Math.max(0, from * (1 - p));
-        if (p >= 1) { clearInterval(id); el.pause(); }
-      }, 25);
-    }, Math.max(0, opt.maxMs - fade));
+  const vol = volume != null ? volume : (opt.volume != null ? opt.volume : SE_VOLUME);
+  if (audioCtx()) {
+    if (playSeBuffer(src, vol, opt)) return;
+    // まだ読み込めていない場合は、読み終わってから鳴らします
+    const p = loadSeBuffer(src);
+    if (p) p.then((buf) => { if (buf) playSeBuffer(src, vol, opt); });
+    return;
   }
+  // Web Audio が無い環境向け
+  if (typeof Audio === "undefined") return;
+  let el = seFallback.get(src);
+  if (!el) { el = new Audio(src); el.preload = "auto"; seFallback.set(src, el); }
+  const c = el.cloneNode();
+  c.volume = Math.min(1, vol);
+  safePlay(c);
 }
 
 /** 音源を先に取りに行っておきます（鳴らす瞬間に間に合わせるため） */
 export function preloadAudio(list) {
-  if (typeof Audio === "undefined") return;
-  for (const src of list) { if (src) baseAudio(src).load(); }
+  for (const src of list) {
+    if (!src) continue;
+    if (audioCtx()) loadSeBuffer(src);
+    else if (typeof Audio !== "undefined") {
+      let el = seFallback.get(src);
+      if (!el) { el = new Audio(src); el.preload = "auto"; seFallback.set(src, el); }
+      el.load();
+    }
+  }
 }
 
 // ---- ループする効果音（Web Audio） --------------------------

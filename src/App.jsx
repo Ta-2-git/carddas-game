@@ -1141,7 +1141,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       gaugeRef.current = next; setGauge(next);
       if (next >= KI_MAX) {
         fullRef.current = true; setFull(true);
-        setBattleLog(l => [...l, `${label}の気力が満ちた！ 攻撃力2倍！`]);
+        setBattleLog(l => [...l, `${label}の気力が満ちた！ 攻撃力1.5倍（必殺技は2倍）！`]);
       }
     };
     // playerAttacked = true … 自分が攻撃を受けた（＝敵が攻撃した）
@@ -1156,13 +1156,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     setBattleLog(l => [...l, `気力ゲージ +${amount}！`]);
     if (next >= KI_MAX) {
       kiFullRef.current = true; setKiFull(true);
-      setBattleLog(l => [...l, `自分の気力が満ちた！ 攻撃力2倍！`]);
+      setBattleLog(l => [...l, `自分の気力が満ちた！ 攻撃力1.5倍（必殺技は2倍）！`]);
     }
   }, []);
   /** 気力ゲージによる攻撃力の倍率 */
-  const kiMul = useCallback(() => (kiFullRef.current ? 2 : 1), []);
-  const enemyKiMul = useCallback(() => (enemyKiFullRef.current ? 2 : 1), []);
-  /** 満タンの気力を使った側のゲージを空にします（1回の攻撃で消費） */
+  // 気力ゲージが満タンのあいだは常にATK1.5倍。必殺技のときだけ2倍にします。
+  const kiMul = useCallback(() => (kiFullRef.current ? 1.5 : 1), []);
+  const enemyKiMul = useCallback(() => (enemyKiFullRef.current ? 1.5 : 1), []);
+  /** 必殺技のときに、1.5倍ぶんを2倍まで引き上げるための追加倍率 */
+  const kiUltMul = useCallback((who) => {
+    const full = who === "player" ? kiFullRef.current : enemyKiFullRef.current;
+    return full ? 2 / 1.5 : 1;
+  }, []);
+  /** 満タンの気力を使った側のゲージを空にします（必殺技を撃った時だけ） */
   const consumeKi = useCallback((who) => {
     if (who === "player") {
       if (!kiFullRef.current) return;
@@ -1186,9 +1192,11 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const barrierReadyRef = useRef(evEffect === "ki_barrier");
   // 発動時のカットイン（イベントカード共通の演出を使います）
   // 条件発動のカットインは進行を止めないので、タップを吸わないようにします
+  const cutInShownRef = useRef(false);
   const cutInCard = useCallback((card = null, owner = "player") => {
     const c = card || eventCard;
     if (!c) return;
+    cutInShownRef.current = true;
     setCutInEventCard(c);
     setCutInOwner(owner);
     setCutInPassive(true);
@@ -1445,7 +1453,9 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       // 変身は攻撃の直前に行われるので、段階は「これから変身する分」を見ます。
       const ss3LvAtAttack = (attacker === "player" && ss3Win) ? ss3Win : ss3LevelRef.current;
       const ultMul = (attacker === "player" && isSS3Char && ss3LvAtAttack >= 2) ? 4 : 2.5;
-      const powerMul = isSpecial ? ultMul
+      // 基礎攻撃力には気力ぶんの1.5倍が既に入っているので、
+      // 必殺技のときだけ 2倍 まで引き上げます（1.5 × (2/1.5) = 2）。
+      const powerMul = isSpecial ? ultMul * kiUltMul(attacker)
                      : isPower ? (1.3 + Math.random() * 0.2)
                      : (1.0 + Math.random() * 0.3);
       if (isPower) setBattleLog(l => [...l, `攻撃力アップ！ ATK×${powerMul.toFixed(2)}`]);
@@ -1463,19 +1473,19 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       if (isFirstWin && attacker === "player") {
         setKaiokenActive(true); kaiokenActiveRef.current = true; setPlayerAnim(MOTION.TRANSFORM);
         setBattleLog(l => [...l, `界王拳！！ ATK×1.5！`]);
-        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, true); }, 1200);
+        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, true, isSpecial); }, 1200);
       } else if (ss1Win && attacker === "player") {
         // GokuSS1: じゃんけんに勝ったので、攻撃の前に変身を見せる。
         // ルーレットの暗い画面が閉じきってから変身モーションを始めます。
         const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
         setTimeout(() => { applySS1Transform(); }, 400);
-        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 400 + tms + 300);
+        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken, isSpecial); }, 400 + tms + 300);
       } else if (ss3Win && attacker === "player") {
         // GokuSS3 も、ルーレットが閉じてから変身を見せてから攻撃します
         const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
         setTimeout(() => { applySS3Level(ss3Win); }, 400);
-        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 400 + tms + 300);
-      } else { setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken); }, 100); }
+        setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken, isSpecial); }, 400 + tms + 300);
+      } else { setTimeout(() => { doAttack(attacker, move, finalDmg, pendingHand, pendingEHand, pendingIsKaioken, isSpecial); }, 100); }
     }, 1000);
     return () => clearTimeout(t);
   }, [rouletteState?.atkStopped, rouletteState?.defStopped]);
@@ -1824,6 +1834,42 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const handleDragonBurstResultRef = useRef(null);
   handleDragonBurstResultRef.current = handleDragonBurstResult;
 
+  // じゃんけんの結果を見せておく時間。
+  // 「戦いのセンス」で勝敗をひっくり返すカードは、必ずこの後に発動させます。
+  const REVEAL_HOLD_MS = 1200;
+
+  /** じゃんけんの結果を見せ終えたあとの処理（カードの発動 → 攻撃へ） */
+  const afterJankenShown = useCallback((raw, hand, eHand) => {
+    reversedThisRoundRef.current = false;
+    cutInShownRef.current = false;
+    const result = applyEnemyLoseStreak(applyLoseStreak(raw));
+    // ひっくり返ったら、表示もそちらに差し替えます
+    if (result !== raw) { setJankenResult(result); setJankenResultLabel(result); }
+    // 勝敗が決まったので気力ゲージを増やします
+    if (result === "win" || result === "lose") addKi(result === "lose");
+    // カードのカットインが出たときは、それを見せ終わるまで待ちます
+    const wait = cutInShownRef.current ? 2400 : 450;
+    const attacker = result === "win" ? "player" : "enemy";
+    const moveId = attacker === "player" ? playerCard[hand] : enemyData[eHand];
+    const pendingMove = MOVES[moveId];
+    setCurrentMove(pendingMove);
+    const isFirstWin = result === "win" && usesKaioken && kaiokenUnlockedRef.current && !kaiokenActiveRef.current;
+    // GokuSS1 は「じゃんけんに勝ったら変身」
+    const ss1Win = isSS1Char && result === "win" && attacker === "player" && !ss1ActiveRef.current;
+    // GokuSS3 は「1勝でSSJ / 2連勝でSSJ3」
+    const ss3Win = (result === "win" && attacker === "player") ? nextSS3Level() : 0;
+    if (isGotenks && result === "win" && attacker === "player") applyGotenksTransform();
+    setTimeout(() => {
+      const latestGotenksAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
+      const latestRawAtk = isGotenks ? latestGotenksAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
+      const latestEffAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? latestRawAtk * 1.5 : latestRawAtk) * kiMul());
+      const latestBaseAtk = attacker === "player" ? latestEffAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul() * enemySaiyanMulRef.current);
+      setJankenResultLabel(null); setPhase("attack");
+      startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win, ss3Win);
+    }, wait);
+  }, [playerCard, enemyData, startAttackRoulette, atkBonus, applyLoseStreak, applyEnemyLoseStreak,
+      addKi, kiMul, enemyKiMul, nextSS3Level, isGotenks, isSS1Char, playerCurrentAtk, usesKaioken, applyGotenksTransform]);
+
   const handleHandSelect = useCallback((hand) => {
     playSe(SE.cancel);
     if (dragonBurstPhase === "janken") {
@@ -1831,11 +1877,18 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       setTimeout(() => {
         const eHand = drawEnemyHand();
         setEnemyHand(eHand); setShowSet(false);
-        reversedThisRoundRef.current = false;
-        const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
-        if (result === "win" || result === "lose") addKi(result === "lose");
-        setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
-        setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, 1500);
+        // ここでも、まず結果をそのまま見せてからカードを発動させます
+        const raw = judgeJanken(hand, eHand);
+        setJankenResult(raw); setJankenResultLabel(raw); setPhase("reveal");
+        setTimeout(() => {
+          reversedThisRoundRef.current = false;
+          cutInShownRef.current = false;
+          const result = applyEnemyLoseStreak(applyLoseStreak(raw));
+          if (result !== raw) { setJankenResult(result); setJankenResultLabel(result); }
+          if (result === "win" || result === "lose") addKi(result === "lose");
+          const wait = cutInShownRef.current ? 2400 : 1500;
+          setTimeout(() => { handleDragonBurstResultRef.current && handleDragonBurstResultRef.current(result, hand, eHand); }, wait);
+        }, REVEAL_HOLD_MS);
       }, 600);
       return;
     }
@@ -1844,42 +1897,17 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     setTimeout(() => {
       const eHand = drawEnemyHand();
       setEnemyHand(eHand); setShowSet(false);
-      // 連敗で発動するサポートカード（戦いのセンスはここで勝敗を逆転させます）
-      reversedThisRoundRef.current = false;
-        const result = applyEnemyLoseStreak(applyLoseStreak(judgeJanken(hand, eHand)));
-      // 勝敗が決まった瞬間に気力ゲージを増やします。
-      // ここで10メモリに達すれば、このターンの攻撃から2倍になります。
-      if (result === "win" || result === "lose") addKi(result === "lose");
-      setJankenResult(result); setJankenResultLabel(result); setPhase("reveal");
-      if (result === "draw") {
+      // まず、じゃんけんの結果をそのまま見せます
+      const raw = judgeJanken(hand, eHand);
+      setJankenResult(raw); setJankenResultLabel(raw); setPhase("reveal");
+      if (raw === "draw") {
         setBattleLog(l => [...l, `T${turn}: ドラゴンバースト！！`]);
         setTimeout(() => { setPlayerHand(null); setEnemyHand(null); setJankenResult(null); setJankenResultLabel(null); setPhase("attack"); setTimerActive(false); startDragonBurst(1.5); }, 2000);
         return;
       }
-      const attacker = result === "win" ? "player" : "enemy";
-      const moveId = attacker === "player" ? playerCard[hand] : enemyData[eHand];
-      const pendingMove = MOVES[moveId];
-      const gotenksEffAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
-      const rawPlayerAtk = isGotenks ? gotenksEffAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
-      const effectivePlayerAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? rawPlayerAtk * 1.5 : rawPlayerAtk) * kiMul());
-      const baseAtk = attacker === "player" ? effectivePlayerAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul() * enemySaiyanMulRef.current);
-      setCurrentMove(pendingMove);
-      const isFirstWin = result === "win" && usesKaioken && kaiokenUnlockedRef.current && !kaiokenActiveRef.current;
-      // GokuSS1 は「じゃんけんに勝ったら変身」
-      const ss1Win = isSS1Char && result === "win" && attacker === "player" && !ss1ActiveRef.current;
-      // GokuSS3 は「1勝でSSJ / 2連勝でSSJ3」
-      const ss3Win = (result === "win" && attacker === "player") ? nextSS3Level() : 0;
-      if (isGotenks && result === "win" && attacker === "player") applyGotenksTransform();
-      setTimeout(() => {
-        const latestGotenksAtk = isGotenks ? getGotenksAtk(gotenksLevelRef.current) : 0;
-        const latestRawAtk = isGotenks ? latestGotenksAtk + atkBonus.player : playerCurrentAtk + atkBonus.player;
-        const latestEffAtk = Math.floor(((kaiokenActiveRef.current && attacker === "player") ? latestRawAtk * 1.5 : latestRawAtk) * kiMul());
-        const latestBaseAtk = attacker === "player" ? latestEffAtk : Math.floor((enemyData.atk + atkBonus.enemy) * enemyKiMul() * enemySaiyanMulRef.current);
-        setJankenResultLabel(null); setPhase("attack");
-        startAttackRoulette(attacker, pendingMove, latestBaseAtk, hand, eHand, kaiokenActiveRef.current, isFirstWin, ss1Win, ss3Win);
-      }, 450);
+      setTimeout(() => afterJankenShown(raw, hand, eHand), REVEAL_HOLD_MS);
     }, 600);
-  }, [phase, dragonBurstPhase, playerCard, enemyData, turn, startDragonBurst, startAttackRoulette, atkBonus, applyLoseStreak, applyEnemyLoseStreak, nextSS3Level]);
+  }, [phase, dragonBurstPhase, turn, startDragonBurst, applyLoseStreak, applyEnemyLoseStreak, addKi, afterJankenShown]);
 
   const drainHp = useCallback((target, fromHp, toHp, onDone) => {
     const dmg = fromHp - toHp;
@@ -1920,7 +1948,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     if (p && p.motion === motion) firePendingShot();
   }, [firePendingShot]);
 
-  const doAttack = (attacker, move, dmg, hand, eHand, isKaioken) => {
+  const doAttack = (attacker, move, dmg, hand, eHand, isKaioken, usedSpecial = false) => {
     // 必殺技以外の攻撃は、近接攻撃と気弾攻撃をだいたい交互に出します
     const isPlayerNormal = attacker === "player" && is3D && move.id !== "rock_kamehameha";
     const useKiBlast = isPlayerNormal && playerAttackCountRef.current % 2 === 1;
@@ -1937,14 +1965,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
         barrierReadyRef.current = false; setBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `気のバリア！ ${dmg}ダメージを無効化した！`]);
-        cutInCard();
+        // ここでカットインを出すと、倒れて起き上がるモーションが隠れてしまうので
+        // 出しません。発動は「0ダメージ」の表示とバトルログで分かります。
       }
       // 敵側の「気のバリア」
       if (hitTarget === "enemy" && enemyBarrierReadyRef.current && dmg >= (enemyEventCard?.threshold || 800)) {
         enemyBarrierReadyRef.current = false; setEnemyBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `${enemyData.name}の気のバリア！ ${dmg}ダメージを無効化した！`]);
-        cutInCard(enemyEventCard, "enemy");
       }
       const newHp = Math.max(0, fromHp - dealt);
       setDmgText({ amount: dealt, target: hitTarget, blocked });
@@ -1952,7 +1980,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       if (attacker === "player") setTimeout(() => revertSaiyanPower(), 1200);
       else setTimeout(() => revertEnemySaiyanPower(), 1200);
       // 気力ゲージは1回の攻撃で使い切ります
-      setTimeout(() => consumeKi(attacker), 1200);
+      // 気力ゲージは必殺技を撃った時だけ消費します（近接や気弾では減りません）
+      if (usedSpecial) setTimeout(() => consumeKi(attacker), 1200);
       setTimeout(() => {
         setDmgText(null);
         if (hitTarget === "enemy") { setEnemyHp(newHp); enemyHpRef.current = newHp; }
@@ -2145,7 +2174,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
         <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", gap: 10, marginTop: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <div style={{ ...BADGE, color: "#f87171", background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>ATK {playerShownAtk}</div>
-            {kiFull && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.6)", animation: "pulse 0.5s infinite" }}>気力MAX⚡ATK×2</div>)}
+            {kiFull && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.6)", animation: "pulse 0.5s infinite" }}>気力MAX⚡ATK×1.5(必殺×2)</div>)}
             {kaiokenActive && (<div style={{ ...BADGE, color: "#ff4400", background: "rgba(255,68,0,0.18)", border: "1px solid rgba(255,68,0,0.55)", animation: "pulse 0.6s infinite" }}>界王拳🔥</div>)}
             {ss1Active && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
             {ss3Level === 1 && (<div style={{ ...BADGE, color: "#fbbf24", background: "rgba(251,191,36,0.18)", border: "1px solid rgba(251,191,36,0.55)", animation: "pulse 0.6s infinite" }}>SS1⚡</div>)}
@@ -2237,7 +2266,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
         )}
         {showFight && (<div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 54, color: "#ffd700", textShadow: "0 0 30px #ffd700, 4px 4px 0 #7c2d12, -1px -1px 0 #000", letterSpacing: 6, animation: fightFadeOut ? "fightOut 0.5s ease forwards" : "fightIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>FIGHT!</div></div>)}
         {phase === "choose" && timer > 0 && timer <= 5 && (<div style={{ position: "absolute", inset: 0, zIndex: 19, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div key={`jk-cd-${timer}`} style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: timer <= 3 ? 120 : 96, color: timer <= 3 ? "#ef4444" : "#f59e0b", lineHeight: 1, opacity: 0.85, animation: "rouletteCountPop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>{timer}</div></div>)}
-        {dmgText && (<div style={{ position: "absolute", inset: 0, zIndex: 18, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dmgTextIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>{dmgText.blocked ? (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 46, color: "#67e8f9", textShadow: "0 0 24px #22d3ee", letterSpacing: 2, lineHeight: 1 }}>🛡️ NO DAMAGE</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 6 }}>無効化！</div></>) : (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 58, color: dmgText.target === "enemy" ? "#fbbf24" : "#f87171", letterSpacing: 2, lineHeight: 1 }}>{dmgText.amount}</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 4 }}>ダメージ！</div></>)}</div></div>)}
+        {dmgText && (<div style={{ position: "absolute", inset: 0, zIndex: 18, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dmgTextIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>{dmgText.blocked ? (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#67e8f9", textShadow: "0 0 16px #22d3ee", letterSpacing: 3, marginBottom: 4 }}>🛡️ 気のバリア</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 58, color: "#67e8f9", letterSpacing: 2, lineHeight: 1 }}>0</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 4 }}>ダメージ！</div></>) : (<><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 58, color: dmgText.target === "enemy" ? "#fbbf24" : "#f87171", letterSpacing: 2, lineHeight: 1 }}>{dmgText.amount}</div><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 20, color: "#fff", letterSpacing: 4, marginTop: 4 }}>ダメージ！</div></>)}</div></div>)}
         {kiryokuPhase === "announce" && (<div style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,rgba(0,10,40,0.85),rgba(10,0,40,0.85))", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "kiryokuIn 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 44, color: "#fff", textShadow: "0 0 20px #3b82f6, 0 0 40px #1d4ed8, 3px 3px 0 #000", letterSpacing: 2, lineHeight: 1.1 }}>気力全開<br />チャンス！</div><div style={{ marginTop: 10, fontSize: 12, color: "#93c5fd", letterSpacing: 6, animation: "pulse 0.6s infinite" }}>⚡ POWER UP ⚡</div></div></div>)}
         {dragonBurstPhase === "announce" && (<div style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,rgba(40,0,0,0.82),rgba(20,0,0,0.88))", pointerEvents: "none" }}><div style={{ textAlign: "center", animation: "dragonBurstIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><div style={{ fontFamily: "'Courier New',monospace", fontWeight: "900", fontSize: 46, color: "#fff", textShadow: "0 0 16px #ef4444, 0 0 32px #dc2626, 4px 4px 0 #000", letterSpacing: 2, lineHeight: 1.1 }}>ドラゴン<br />バースト！</div>{dragonBurstMultiplier > 1 && <div style={{ marginTop: 8, fontSize: 16, fontWeight: "900", color: "#fbbf24", animation: "pulse 0.4s infinite" }}>ATK × {dragonBurstMultiplier.toFixed(1)}</div>}</div></div>)}
         {clashFlash && <div style={{ position: "absolute", inset: 0, zIndex: 35, background: "radial-gradient(ellipse at center, rgba(255,200,50,0.9) 0%, rgba(255,150,0,0) 70%)", pointerEvents: "none", animation: "clashFlashAnim 0.3s ease forwards" }} />}
