@@ -29,6 +29,11 @@ const IMG_CARD_GOKU_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/7
 const IMG_CARD_GOKU_SS3 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/8D809B5A-0E97-4B58-9458-4DE283208BB3.png";
 const IMG_CARD_VEGETA_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No004.png";
 const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
+// カード排出演出で使う筐体の画像。
+// 排出口（黒い四角）の位置は画像を解析して求めた比率です（868×1811px）。
+const CABINET_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/%E7%AD%90%E4%BD%93.png";
+const CABINET_RATIO = 868 / 1811;
+const CARD_SLOT = { left: 0.3514, right: 0.6313, top: 0.8526, bottom: 0.9094 };
 const IMG_PUNCH_SHEET = "";
 const IMG_BEAM_SHEET = "";
 const PUNCH_FRAME = { w: 204.8, h: 272, count: 5 };
@@ -280,20 +285,25 @@ const StickmanFighter = ({ card, isEnemy, state = "idle", size = 100 }) => {
   );
 };
 
-const CardBack = ({ small = false, large = false }) => {
-  const w = small ? 80 : large ? 220 : 130; const h = small ? 112 : large ? 308 : 182;
+const CardBack = ({ small = false, large = false, fill = false }) => {
+  // fill のときは親の枠いっぱいに広げます。SVGの模様だけは数値が要るので
+  // 既定の大きさ（220×308）で描き、preserveAspectRatio="none" で伸ばします。
+  const vw = small ? 80 : large || fill ? 220 : 130;
+  const vh = small ? 112 : large || fill ? 308 : 182;
+  const w = fill ? "100%" : vw;
+  const h = fill ? "100%" : vh;
   if (CARD_BACK_IMG) {
     return (
-      <div style={{ width: w, height: h, borderRadius: large ? 14 : 10, overflow: "hidden", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88" }}>
+      <div style={{ width: w, height: h, borderRadius: large || fill ? 14 : 10, overflow: "hidden", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88" }}>
         <img src={CARD_BACK_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
     );
   }
   return (
-    <div style={{ width: w, height: h, borderRadius: large ? 14 : 10, background: "linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.3 }} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-        {Array.from({ length: 20 }).map((_, i) => (<line key={`d1-${i}`} x1={i * 14 - h} y1={0} x2={i * 14} y2={h} stroke="#f59e0b" strokeWidth="0.5" />))}
-        {Array.from({ length: 20 }).map((_, i) => (<line key={`d2-${i}`} x1={i * 14} y1={0} x2={i * 14 - h} y2={h} stroke="#f59e0b" strokeWidth="0.5" />))}
+    <div style={{ width: w, height: h, borderRadius: large || fill ? 14 : 10, background: "linear-gradient(135deg,#1a0a00,#2d1000,#1a0a00)", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88, inset 0 0 30px rgba(0,0,0,0.5)", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.3 }} viewBox={`0 0 ${vw} ${vh}`} preserveAspectRatio="none">
+        {Array.from({ length: 20 }).map((_, i) => (<line key={`d1-${i}`} x1={i * 14 - vh} y1={0} x2={i * 14} y2={vh} stroke="#f59e0b" strokeWidth="0.5" />))}
+        {Array.from({ length: 20 }).map((_, i) => (<line key={`d2-${i}`} x1={i * 14} y1={0} x2={i * 14 - vh} y2={vh} stroke="#f59e0b" strokeWidth="0.5" />))}
       </svg>
       <div style={{ fontSize: 32, zIndex: 1, filter: "drop-shadow(0 0 8px #f59e0b)" }}>⭐</div>
       <div style={{ position: "absolute", bottom: 6, fontSize: 7, color: "#f59e0b88", fontFamily: "monospace", letterSpacing: 2 }}>CARDDAS</div>
@@ -661,8 +671,40 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
           ))}
         </div>
       )}
+      {/* 排出中は筐体を出し、下部の「カード出口」からカードがせり上がってきます。
+          タッチしてめくると筐体が消え、いつもの表示に切り替わります。 */}
+      {phase >= 1 && phase < 3 && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "#0b0b12", display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: phase === 1 ? "pointer" : "default",
+                      opacity: phase >= 2 ? 0 : 1, transition: "opacity 0.45s ease",
+                      pointerEvents: phase >= 2 ? "none" : "auto" }}
+             onClick={flipCard}
+             onTouchEnd={(e) => { e.preventDefault(); flipCard(); }}>
+          <div style={{ position: "relative", height: "100%", aspectRatio: `${CABINET_RATIO}`, maxWidth: "100%" }}>
+            <img src={CABINET_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none", pointerEvents: "none" }} />
+            {/* 排出口の位置に合わせた窓。この中でカードをせり上げるので、
+                口から出てくるように見えます */}
+            <div style={{ position: "absolute",
+                          left: `${(CARD_SLOT.left + CARD_SLOT.right) / 2 * 100}%`,
+                          bottom: `${(1 - (CARD_SLOT.top + CARD_SLOT.bottom) / 2) * 100}%`,
+                          transform: "translateX(-50%)",
+                          width: `${(CARD_SLOT.right - CARD_SLOT.left) * 0.94 * 100}%`,
+                          aspectRatio: "220 / 308", overflow: "hidden", pointerEvents: "none" }}>
+              <div style={{ width: "100%", height: "100%", animation: "cardEject 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both" }}>
+                <CardBack fill />
+              </div>
+            </div>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: "2%", textAlign: "center", fontFamily: "'Courier New',monospace",
+                          fontSize: 13, fontWeight: "900", color: rar.color, letterSpacing: 3,
+                          textShadow: `0 0 12px ${rar.glow}, 0 0 3px #000`, animation: "pulse 0.8s infinite",
+                          opacity: phase === 1 ? 1 : 0 }}>
+              ▼ タッチしてカードをめくる
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-        {phase >= 1 && (<div style={{ fontSize: 12, color: rar.color, letterSpacing: 4, marginBottom: 20, animation: "fadeInUp 0.5s ease", textShadow: `0 0 20px ${rar.color}` }}>✦ カード排出！ ✦</div>)}
+        {phase >= 2 && (<div style={{ fontSize: 12, color: rar.color, letterSpacing: 4, marginBottom: 20, animation: "fadeInUp 0.5s ease", textShadow: `0 0 20px ${rar.color}` }}>✦ カード排出！ ✦</div>)}
         {phase >= 1 && (
           <div style={{ perspective: "1000px", marginBottom: 20 }}
                onClick={flipCard}
@@ -680,9 +722,6 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
               </div>
             </div>
           </div>
-        )}
-        {phase === 1 && (
-          <div style={{ fontSize: 12, fontWeight: "900", color: rar.color, letterSpacing: 3, marginBottom: 16, animation: "pulse 0.8s infinite", textShadow: `0 0 12px ${rar.glow}` }}>▼ タッチしてカードをめくる</div>
         )}
         {phase >= 3 && (
           <div style={{ animation: "fadeInUp 0.5s ease", background: "rgba(0,0,0,0.7)", border: `1px solid ${rar.color}44`, borderRadius: 12, padding: "14px 20px", maxWidth: 260, margin: "0 auto 16px" }}>
@@ -2610,6 +2649,7 @@ export default function App() {
         @keyframes starFloat { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-30px) scale(0.5)} }
         @keyframes dmgTextIn { 0%{opacity:0;transform:scale(0.4) translateY(10px)} 60%{opacity:1;transform:scale(1.05) translateY(-5px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes dragonBurstIn { 0%{opacity:0;transform:scale(0.2) rotate(-8deg)} 50%{opacity:1;transform:scale(1.08)} 100%{opacity:1;transform:scale(1)} }
+        @keyframes cardEject { 0%{transform:translateY(105%)} 100%{transform:translateY(0)} }
         @keyframes clashFlashAnim { 0%{opacity:1} 100%{opacity:0} }
         @keyframes coreFlash { 0%{transform:translate(-50%,-50%) scale(0.7);opacity:0.8} 100%{transform:translate(-50%,-50%) scale(1.2);opacity:1} }
         @keyframes vsTextIn { 0%{opacity:0;transform:translate(-50%,-50%) scale(3) rotate(-4deg)} 60%{opacity:1;transform:translate(-50%,-50%) scale(0.95)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1)} }

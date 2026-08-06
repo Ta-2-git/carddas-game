@@ -171,25 +171,43 @@ function playSeBuffer(src, vol, opt) {
   return true;
 }
 
-/** 効果音を1回鳴らします */
-export function playSe(src, volume = null) {
-  if (!src) return;
-  const opt = SE_OPTIONS[src] || {};
-  const vol = volume != null ? volume : (opt.volume != null ? opt.volume : SE_VOLUME);
-  if (audioCtx()) {
-    if (playSeBuffer(src, vol, opt)) return;
-    // まだ読み込めていない場合は、読み終わってから鳴らします
-    const p = loadSeBuffer(src);
-    if (p) p.then((buf) => { if (buf) playSeBuffer(src, vol, opt); });
-    return;
-  }
-  // Web Audio が無い環境向け
+/** <audio> で鳴らします（Web Audio が使えない・間に合わない時の受け皿） */
+function playSeElement(src, vol) {
   if (typeof Audio === "undefined") return;
   let el = seFallback.get(src);
   if (!el) { el = new Audio(src); el.preload = "auto"; seFallback.set(src, el); }
   const c = el.cloneNode();
-  c.volume = Math.min(1, vol);
+  c.volume = Math.min(1, Math.max(0, vol));
   safePlay(c);
+}
+
+/**
+ * 効果音を1回鳴らします。
+ * 読み込み済みなら Web Audio で鳴らし、まだなら <audio> で今すぐ鳴らします。
+ * 「読み込みを待ってから鳴らす」だと、間に合わないときに遅れて鳴ったり
+ * そのまま鳴らなかったりします。待たずにその場で鳴らせる方を使い、
+ * 裏では次回のために読み込んでおきます。
+ */
+export function playSe(src, volume = null) {
+  if (!src) return;
+  const opt = SE_OPTIONS[src] || {};
+  const vol = volume != null ? volume : (opt.volume != null ? opt.volume : SE_VOLUME);
+  const ctx = audioCtx();
+  if (ctx && seBuffers.has(src)) {
+    if (ctx.state === "running") {
+      if (playSeBuffer(src, vol, opt)) return;
+    } else {
+      // 止まっている場合は起こしてから鳴らします。
+      // 起こせなければ <audio> に切り替えます。
+      ctx.resume().then(() => {
+        if (!playSeBuffer(src, vol, opt)) playSeElement(src, vol);
+      }).catch(() => playSeElement(src, vol));
+      return;
+    }
+  }
+  // まだ読み込めていない、または Web Audio が無い場合
+  if (ctx) loadSeBuffer(src);   // 次に鳴らす時のために裏で読んでおきます
+  playSeElement(src, vol);
 }
 
 /** 音源を先に取りに行っておきます（鳴らす瞬間に間に合わせるため） */
@@ -197,7 +215,8 @@ export function preloadAudio(list) {
   for (const src of list) {
     if (!src) continue;
     if (audioCtx()) loadSeBuffer(src);
-    else if (typeof Audio !== "undefined") {
+    // <audio> 側も用意しておきます（Web Audio が間に合わない時の受け皿）
+    if (typeof Audio !== "undefined") {
       let el = seFallback.get(src);
       if (!el) { el = new Audio(src); el.preload = "auto"; seFallback.set(src, el); }
       el.load();
