@@ -649,7 +649,9 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
   const [phase, setPhase] = useState(0);
   const rar = RARITY_CONFIG[card.rarity];
   const flipTimers = useRef([]);
-  // 裏面で止めて待ちます。めくるのは利用者がタッチしてからです。
+  // 筐体を出す → タッチでカードが出てくる → もう一度タッチでめくる、の3段階です
+  const [ejected, setEjected] = useState(false);   // カードが排出口から出たか
+  const [canFlip, setCanFlip] = useState(false);   // せり上がりが終わってめくれるか
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 300);
     return () => { clearTimeout(t1); flipTimers.current.forEach(clearTimeout); };
@@ -662,6 +664,17 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
       setTimeout(() => setPhase(4), 1600),
     ];
   };
+  /** 筐体を触ったとき。1回目でカードを出し、2回目でめくります */
+  const tapCabinet = () => {
+    if (phase !== 1) return;
+    if (!ejected) {
+      setEjected(true);
+      // せり上がり（0.2秒待ち＋1.1秒）が終わってからめくれるようにします
+      flipTimers.current.push(setTimeout(() => setCanFlip(true), 1400));
+      return;
+    }
+    if (canFlip) flipCard();
+  };
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: `radial-gradient(ellipse at center,${rar.color}22 0%,#000 70%)`, fontFamily: "'Courier New',monospace", padding: 20, overflow: "hidden" }}>
       {phase >= 2 && (
@@ -671,15 +684,16 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
           ))}
         </div>
       )}
-      {/* 排出中は筐体を出し、下部の「カード出口」からカードがせり上がってきます。
-          タッチしてめくると筐体が消え、いつもの表示に切り替わります。 */}
+      {/* まず筐体を出します。1回目のタッチで下部の「カード出口」から
+          カードがせり上がり、2回目のタッチでめくれます。
+          めくると筐体が薄くなって消え、いつもの表示に切り替わります。 */}
       {phase >= 1 && phase < 3 && (
         <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "#0b0b12", display: "flex", alignItems: "center", justifyContent: "center",
                       cursor: phase === 1 ? "pointer" : "default",
                       opacity: phase >= 2 ? 0 : 1, transition: "opacity 0.45s ease",
                       pointerEvents: phase >= 2 ? "none" : "auto" }}
-             onClick={flipCard}
-             onTouchEnd={(e) => { e.preventDefault(); flipCard(); }}>
+             onClick={tapCabinet}
+             onTouchEnd={(e) => { e.preventDefault(); tapCabinet(); }}>
           <div style={{ position: "relative", height: "100%", aspectRatio: `${CABINET_RATIO}`, maxWidth: "100%" }}>
             <img src={CABINET_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none", pointerEvents: "none" }} />
             {/* 排出口の位置に合わせた窓。この中でカードをせり上げるので、
@@ -690,15 +704,17 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
                           transform: "translateX(-50%)",
                           width: `${(CARD_SLOT.right - CARD_SLOT.left) * 0.94 * 100}%`,
                           aspectRatio: "220 / 308", overflow: "hidden", pointerEvents: "none" }}>
-              <div style={{ width: "100%", height: "100%", animation: "cardEject 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both" }}>
-                <CardBack fill />
-              </div>
+              {ejected && (
+                <div style={{ width: "100%", height: "100%", animation: "cardEject 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both" }}>
+                  <CardBack fill />
+                </div>
+              )}
             </div>
             <div style={{ position: "absolute", left: 0, right: 0, bottom: "2%", textAlign: "center", fontFamily: "'Courier New',monospace",
                           fontSize: 13, fontWeight: "900", color: rar.color, letterSpacing: 3,
                           textShadow: `0 0 12px ${rar.glow}, 0 0 3px #000`, animation: "pulse 0.8s infinite",
                           opacity: phase === 1 ? 1 : 0 }}>
-              ▼ タッチしてカードをめくる
+              {!ejected ? "▼ タッチしてカードを出す" : canFlip ? "▼ もう一度タッチしてめくる" : ""}
             </div>
           </div>
         </div>
@@ -2169,13 +2185,16 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
       kaiokenActiveRef.current = true; setKaiokenActive(true);
       setBattleLog(l => [...l, `HP半分以下！ 界王拳！！ ATK×1.5！`]);
       const tms = Math.round(getMotionPlaySeconds(playerCard.id, MOTION.TRANSFORM) * 1000) || 2000;
-      // 被弾で倒れた場合は呼び出し側が起き上がり切るまで待っているので、
-      // ここではもう待つ必要がありません。
-      const waitMs = 0;
-      setTimeout(() => { setPlayerAnim(MOTION.TRANSFORM); setTransformShown(true); }, waitMs);
+      // 起き上がりきってから変身モーションを再生します。
+      // 「待機に戻す → 少し置いて変身」の順にしないと、直前のモーションと
+      // 同じ扱いになって変身が再生されないことがあります
+      //（スーパーサイヤ人の変身と同じ手順に揃えています）。
+      const waitMs = 250;
+      setTimeout(() => { setPlayerAnim("idle"); setTransformShown(true); }, waitMs);
+      setTimeout(() => { setPlayerAnim(MOTION.TRANSFORM); }, waitMs + 60);
       // 変身が終わったら必ず待機モーションへ戻します
-      setTimeout(() => setPlayerAnim("idle"), waitMs + tms + 50);
-      kaiokenDelay = waitMs + tms + 400; // 起き上がり＋変身モーション＋余韻
+      setTimeout(() => setPlayerAnim("idle"), waitMs + 60 + tms + 80);
+      kaiokenDelay = waitMs + 60 + tms + 400; // 変身モーション＋余韻
     }
 
     const startRound = () => {
@@ -2316,7 +2335,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
           <BattleStage3D
             playerCardId={playerCard.id}
             enemyCardId={enemyData.id}
-            playerAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : playerAnim}
+            playerAnim={dragonBurstPhase === "janken" && playerAnim !== MOTION.TRANSFORM ? MOTION.MELEE : playerAnim}
             enemyAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
             playerTransformed={transformShown}
             playerTransformLevel={isSS3Char ? ss3Level : null}
