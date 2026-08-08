@@ -69,8 +69,11 @@ const SE_OPTIONS = {
 //        オーラのゲインは 5.8 → 3.9 に下げています（波形の最大 0.40 → 0.27）。
 //        近接攻撃音が 0.53 なので、その半分くらいの控えめな音量です。
 // rouletteSpin … 2.67秒。全体が平坦（0.24前後）なので丸ごと繰り返します。
+//        keepSec は「素材の先頭からこの秒数だけ使う」指定です。変身音は
+//        53秒（9MB）あり、展開すると20MB以上をずっと抱えることになるので、
+//        繰り返しに必要な14秒だけ残します（2.5〜14秒を折り返します）。
 const LOOP_SPECS = {
-  aura: { src: SE.aura, loopStart: 2.5, gain: 2.4, gainAfter: 3.9, rampAt: 1.0, rampDur: 0.4 },
+  aura: { src: SE.aura, loopStart: 2.5, keepSec: 14, gain: 2.4, gainAfter: 3.9, rampAt: 1.0, rampDur: 0.4 },
   rouletteSpin: { src: SE.rouletteSpin, loopStart: 0, gain: 1.2 },
 };
 
@@ -98,6 +101,12 @@ function armUnlock() {
         s.connect(ctx.destination);
         s.start(0);
       } catch { /* 起こせなくても進行は止めません */ }
+      // 眠っている状態だと音を展開できない端末があるので、
+      // 起きたこのタイミングで全部の効果音を読み直します。
+      // これをしないと、スマホでスカウター等が鳴りません。
+      for (const src of Object.values(SE)) {
+        if (src !== SE.aura) loadSeBuffer(src);
+      }
     }
     while (pending.length) {
       const retry = pending.shift();
@@ -168,17 +177,29 @@ function playSeBuffer(src, vol, opt) {
   } else {
     node.start(0);
   }
+  // 鳴り終わったら繋ぎを外します。残したままだと数が増えて、
+  // スマホで音が途切れる原因になります。
+  node.onended = () => {
+    try { node.disconnect(); gain.disconnect(); } catch { /* 外れていれば無視 */ }
+  };
   return true;
 }
 
-/** <audio> で鳴らします（Web Audio が使えない・間に合わない時の受け皿） */
+/**
+ * <audio> で鳴らします（Web Audio が使えない・間に合わない時の受け皿）。
+ * 鳴らせたかどうかを { ok } で返します（スマホでは止められることがあります）。
+ */
 function playSeElement(src, vol) {
-  if (typeof Audio === "undefined") return;
+  const st = { ok: null };
+  if (typeof Audio === "undefined") { st.ok = false; return st; }
   let el = seFallback.get(src);
   if (!el) { el = new Audio(src); el.preload = "auto"; seFallback.set(src, el); }
   const c = el.cloneNode();
   c.volume = Math.min(1, Math.max(0, vol));
-  safePlay(c);
+  const p = c.play();
+  if (p && typeof p.then === "function") p.then(() => { st.ok = true; }, () => { st.ok = false; });
+  else st.ok = true;
+  return st;
 }
 
 /**
@@ -205,9 +226,14 @@ export function playSe(src, volume = null) {
       return;
     }
   }
-  // まだ読み込めていない、または Web Audio が無い場合
-  if (ctx) loadSeBuffer(src);   // 次に鳴らす時のために裏で読んでおきます
-  playSeElement(src, vol);
+  // まだ読み込めていない場合は <audio> で今すぐ鳴らしてみます。
+  // スマホは止められることがあるので、読み込みが終わった時点で
+  // 鳴らせていなければ Web Audio で鳴らし直します（二重には鳴りません）。
+  const st = playSeElement(src, vol);
+  if (ctx) {
+    const p = loadSeBuffer(src);
+    if (p) p.then((buf) => { if (buf && st.ok === false) playSeBuffer(src, vol, opt); });
+  }
 }
 
 /** 音源を先に取りに行っておきます（鳴らす瞬間に間に合わせるため） */
@@ -235,7 +261,29 @@ function audioCtx() {
   const C = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
   if (!C) return null;
   actx = new C();
+  // 画面録画や着信で音が中断されると、そのまま止まったり
+  // ノイズだけになったりします。止まったら起こし直します。
+  try {
+    actx.addEventListener("statechange", () => {
+      if (actx && actx.state !== "running") actx.resume().catch(() => {});
+    });
+  } catch { /* 対応していない環境は無視します */ }
   return actx;
+}
+
+/**
+ * 長い音源を先頭の必要な分だけに切り詰めます。
+ * 変身音は53秒（9MB）あり、そのまま展開すると20MB以上を抱えてしまいます。
+ * スマホでは音が途切れる原因になるので、繰り返しに必要な分だけ残します。
+ */
+function trimBuffer(ctx, buf, keepSec) {
+  if (!keepSec || buf.duration <= keepSec) return buf;
+  const len = Math.floor(keepSec * buf.sampleRate);
+  const out = ctx.createBuffer(buf.numberOfChannels, len, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    out.getChannelData(c).set(buf.getChannelData(c).subarray(0, len));
+  }
+  return out;
 }
 
 /** ループ音を鳴らし始めます（既に鳴っていれば何もしません） */
@@ -275,7 +323,7 @@ export function startLoop(name) {
     fetch(spec.src)
       .then((r) => r.arrayBuffer())
       .then((b) => ctx.decodeAudioData(b))
-      .then((buf) => { loopBufs.set(spec.src, buf); begin(); })
+      .then((buf) => { loopBufs.set(spec.src, trimBuffer(ctx, buf, spec.keepSec)); begin(); })
       .catch(() => { /* 読めなくても進行は止めません */ });
   };
 
@@ -298,38 +346,54 @@ export const startRouletteLoop = () => startLoop("rouletteSpin");
 export const stopRouletteLoop = () => stopLoop("rouletteSpin");
 
 // ---- BGM ---------------------------------------------------
+//  <audio> の要素は「1つだけ」を使い回します。
+//  曲ごとに新しく作ると、前の曲を止め損ねたときに二重で鳴り続けます
+//  （ロビー曲がバトル中も鳴っていたのはこれが原因でした）。
 let bgmEl = null;
 let bgmSrc = null;
 let fadeTimer = null;
 
-/**
- * BGMを切り替えます。同じ曲が既に鳴っていれば何もしません。
- * 前の曲は0.4秒かけて小さくしてから止めます。
- */
+function bgmElement() {
+  if (typeof Audio === "undefined") return null;
+  if (!bgmEl) {
+    bgmEl = new Audio();
+    bgmEl.loop = true;
+    bgmEl.preload = "auto";
+    bgmEl.volume = BGM_VOLUME;
+  }
+  return bgmEl;
+}
+
+/** BGMを切り替えます。同じ曲が既に指定されていれば何もしません。 */
 export function playBgm(src) {
-  if (typeof Audio === "undefined") return;
-  if (bgmSrc === src && bgmEl && !bgmEl.paused) return;
-  stopBgm();
+  const el = bgmElement();
+  if (!el) return;
+  if (bgmSrc === src) {
+    // 同じ曲。自動再生を止められて止まっている場合だけ鳴らし直します
+    if (src && el.paused) safePlay(el, () => { if (bgmSrc === src) safePlay(el); });
+    return;
+  }
+  if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
   bgmSrc = src;
-  if (!src) return;
-  bgmEl = new Audio(src);
-  bgmEl.loop = true;
-  bgmEl.volume = BGM_VOLUME;
-  const el = bgmEl;
-  safePlay(el, () => { if (bgmEl === el) safePlay(el); });
+  if (!src) { el.pause(); return; }
+  el.pause();
+  el.src = src;   // src を入れ直すと再生位置も先頭に戻ります
+  el.volume = BGM_VOLUME;
+  safePlay(el, () => { if (bgmSrc === src) safePlay(el); });
 }
 
 /** BGMを止めます（フェードアウト付き） */
 export function stopBgm() {
   if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
-  const old = bgmEl;
-  bgmEl = null; bgmSrc = null;
-  if (!old) return;
+  const el = bgmEl;
+  bgmSrc = null;
+  if (!el) return;
   fadeTimer = setInterval(() => {
-    old.volume = Math.max(0, old.volume - BGM_VOLUME / 8);
-    if (old.volume <= 0.001) {
+    el.volume = Math.max(0, el.volume - BGM_VOLUME / 8);
+    if (el.volume <= 0.001) {
       clearInterval(fadeTimer); fadeTimer = null;
-      old.pause();
+      el.pause();
+      el.volume = BGM_VOLUME;
     }
   }, 50);
 }
