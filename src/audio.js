@@ -67,7 +67,11 @@ const LOOP_SPECS = {
   rouletteSpin: { src: SE.rouletteSpin, volume: 1.0, loopStart: 0, loopEnd: 0 },
 };
 
-const POOL_SIZE = 2; // 同じ音を重ねて鳴らせる数（多すぎると端末が持てません）
+// 同じ音を重ねて鳴らせる数。
+// 音声要素をたくさん持つほど、端末の音まわりが不安定になります。
+// このゲームは同じ効果音が重なる場面がほとんど無いので1つにします
+// （全部で 効果音10 + ループ2 + BGM1 = 13個）。
+const POOL_SIZE = 1;
 
 // ---- 要素の置き場 ------------------------------------------
 const sePool = new Map();   // URL -> [HTMLAudioElement]
@@ -100,7 +104,8 @@ function poolFor(src) {
     }
     sePool.set(src, arr);
     seTurn.set(src, 0);
-    if (unlocked) arr.forEach(unlockEl);
+    // 解除は「画面を触った瞬間」にまとめて行います。
+    // ここで鳴らすと、その音が実際に聞こえてしまいます。
   }
   return arr;
 }
@@ -125,7 +130,6 @@ function loopFor(name) {
       });
     }
     loopEls.set(name, el);
-    if (unlocked) unlockEl(el);
   }
   return el;
 }
@@ -135,18 +139,29 @@ function loopFor(name) {
  * 要素を「一度鳴らした」ことにしておきます。
  * スマホは画面を触った瞬間しか鳴らせないので、そのときにまとめて
  * play → 即 pause しておくと、以降は好きなタイミングで鳴らせます。
+ *
+ * 止めるのは必ず同期（play のすぐ次の行）で行います。
+ * iPhone は音量の指定を受け付けないため、音量を0にして待つ方法だと
+ * 「解除の瞬間に全部の効果音がまとめて鳴る」ことになります。
  */
+const unlockedEls = new WeakSet();
 function unlockEl(el) {
-  if (!el) return;
-  const v = el.volume;
-  el.volume = 0;
-  const p = el.play();
-  const done = () => { try { el.pause(); el.currentTime = 0; } catch { /* 無視 */ } el.volume = v; };
-  if (p && typeof p.then === "function") p.then(done, () => { el.volume = v; });
-  else done();
+  if (!el || unlockedEls.has(el)) return;
+  unlockedEls.add(el);
+  try {
+    const p = el.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    el.pause();          // ここで即座に止めるので音は出ません
+    el.currentTime = 0;
+  } catch { /* 解除できなくても進行は止めません */ }
 }
 
 function unlockAll() {
+  // 触られたこの瞬間に、使う音を全部用意してから解除します。
+  // あとから作った要素は解除できず（触っていない扱いになるため）、
+  // スマホで鳴らないままになります。
+  for (const src of Object.values(SE)) poolFor(src);
+  for (const name of Object.keys(LOOP_SPECS)) loopFor(name);
   for (const arr of sePool.values()) arr.forEach(unlockEl);
   for (const el of loopEls.values()) unlockEl(el);
   // BGMは鳴らしたい曲があれば、そのまま鳴らします
