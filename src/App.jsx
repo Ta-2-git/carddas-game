@@ -295,7 +295,7 @@ const CardBack = ({ small = false, large = false, fill = false }) => {
   if (CARD_BACK_IMG) {
     return (
       <div style={{ width: w, height: h, borderRadius: large || fill ? 14 : 10, overflow: "hidden", border: "2px solid #f59e0b", boxShadow: "0 0 20px #f59e0b88" }}>
-        <img src={CARD_BACK_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={CARD_BACK_IMG} alt="" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
     );
   }
@@ -318,7 +318,7 @@ const GokuCardDisplay = ({ card, selected, onClick, small = false }) => {
     <div onClick={onClick} style={{ width: w, height: h, borderRadius: 10, background: "linear-gradient(160deg, #1a0500 0%, #2d1000 60%, #1a0800 100%)", border: `2px solid ${selected ? "#fbbf24" : rar.color}`, boxShadow: selected ? `0 0 20px #fbbf24, 0 0 40px #fbbf2466` : `0 0 10px ${rar.glow}55`, cursor: "pointer", position: "relative", overflow: "hidden", transition: "all 0.2s", transform: selected ? "scale(1.06) translateY(-4px)" : "scale(1)", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 4px 4px", userSelect: "none" }}>
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, background: rar.color, color: "#000", fontSize: small ? 7 : 9, fontWeight: "900", textAlign: "center", padding: "2px 0", fontFamily: "'Courier New',monospace", letterSpacing: 1 }}>{card.rarity}</div>
       <div style={{ marginTop: small ? 12 : 14, flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {(card.img || IMG_CARD_GOKU) ? <img src={card.img || IMG_CARD_GOKU} alt={card.name} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} /> : <StickmanFighter card={card} size={small ? 44 : 72} />}
+        {(card.img || IMG_CARD_GOKU) ? <img src={card.img || IMG_CARD_GOKU} alt={card.name} decoding="async" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} /> : <StickmanFighter card={card} size={small ? 44 : 72} />}
       </div>
       <div style={{ fontSize: small ? 7 : 9, color: "#fff", fontWeight: "700", textAlign: "center", padding: "2px 2px 0", fontFamily: "'Courier New',monospace", textShadow: "0 0 8px #f59e0b", lineHeight: 1.2 }}>{card.name}</div>
       {!small && <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
@@ -606,7 +606,7 @@ const TitleBtn = ({ label, color, onClick, primary, badge }) => (
 const TitleScreen = ({ onStart, onGacha, onCards, ownedCards }) => (
   <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", background: "#000", padding: "0 0 32px", fontFamily: "'Courier New',monospace", position: "relative", overflow: "hidden" }}>
     <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 160, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      {TITLE_IMG ? <img src={TITLE_IMG} alt="STICKMAN CARDDAS" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : (
+      {TITLE_IMG ? <img src={TITLE_IMG} alt="STICKMAN CARDDAS" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : (
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 36, fontWeight: "900", color: "#f59e0b", textShadow: "0 0 40px #f59e0b, 0 0 80px #f59e0b44", fontFamily: "'Courier New',monospace", letterSpacing: 4, animation: "titlePulse 2s ease-in-out infinite" }}>STICKMAN<br />CARDDAS</div>
           <div style={{ marginTop: 20 }}><StickmanFighter card={CARDS[0]} size={120} state="idle" /></div>
@@ -695,7 +695,7 @@ const GachaResultScreen = ({ card, mode = "gacha", onHome, onBuyAgain, onSelectC
              onClick={tapCabinet}
              onTouchEnd={(e) => { e.preventDefault(); tapCabinet(); }}>
           <div style={{ position: "relative", height: "100%", aspectRatio: `${CABINET_RATIO}`, maxWidth: "100%" }}>
-            <img src={CABINET_IMG} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none", pointerEvents: "none" }} />
+            <img src={CABINET_IMG} alt="" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none", pointerEvents: "none" }} />
             {/* 排出口の位置に合わせた窓。この中でカードをせり上げるので、
                 口から出てくるように見えます */}
             <div style={{ position: "absolute",
@@ -2569,7 +2569,12 @@ const OwnedCardsScreen = ({ ownedCards, onBack }) => {
 export default function App() {
   // タイトル画面を見ている間に、素体モデルと待機モーションを取っておきます
   // （カード選択で選んだ瞬間にキャラが動き出すようにするため）
-  useEffect(() => { preload(getPreloadUrls()); }, []);
+  // 素体モデルの先読みは、いきなり始めず少し待ってから1つずつ行います。
+  // 起動直後に十数MBを取りに行くと、展開の負荷で音が途切れます。
+  useEffect(() => {
+    const t = setTimeout(() => preload(getPreloadUrls()), 2500);
+    return () => clearTimeout(t);
+  }, []);
   // 効果音も先に取っておきます（鳴らす瞬間に間に合わせるため）
   useEffect(() => { preloadAudio([SE.melee, SE.ultimate, SE.kiBlast, SE.dragonBurst, SE.scouter, SE.cursor, SE.cancel, SE.rouletteStop]); }, []);
 

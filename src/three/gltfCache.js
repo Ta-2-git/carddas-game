@@ -168,13 +168,23 @@ export async function loadModelInstance(url) {
   return { scene: gltf.scene, animations: gltf.animations || [] };
 }
 
-/** 先読み（失敗しても無視します） */
+/**
+ * 先読み（失敗しても無視します）。
+ * 一度に全部取りに行くと、読み込みと展開が重なって画面と音が止まります。
+ * 特にスマホでは、この処理の裏で鳴っている音がブツブツ途切れる原因に
+ * なるので、1つずつ順番に、間を空けて処理します。
+ */
 export function preload(urls = []) {
-  for (const url of urls) {
-    if (!url) continue;
-    if (/\.(glb|gltf)(\?|$)/i.test(url)) loadModel(url).catch(() => {});
-    else loadClips(url);
-  }
+  const list = urls.filter(Boolean);
+  let i = 0;
+  const next = () => {
+    if (i >= list.length) return;
+    const url = list[i++];
+    const done = () => setTimeout(next, 120); // 少し休んでから次へ
+    const p = /\.(glb|gltf)(\?|$)/i.test(url) ? loadModel(url) : loadClips(url);
+    Promise.resolve(p).then(done, done);
+  };
+  next();
 }
 
 /** 名前でクリップを選びます。名前未指定なら最初のクリップ */
