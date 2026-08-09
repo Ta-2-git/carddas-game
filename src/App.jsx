@@ -963,6 +963,9 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
   const [selected, setSelected] = useState(null);
   const [fuseCandidate, setFuseCandidate] = useState(null);
   const [showFuseAnim, setShowFuseAnim] = useState(false);
+  // 演出に出す2体（選択状態を変えても演出が崩れないように控えを持ちます）
+  const [fuseSideA, setFuseSideA] = useState(null);
+  const [fuseSideB, setFuseSideB] = useState(null);
   const [assembled, setAssembled] = useState(false);
   const [fusedCard, setFusedCard] = useState(null);
   const cards = ownedCards.map(id => CARDS.find(c => c.id === id)).filter(Boolean);
@@ -976,31 +979,37 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
   };
 
   const handleFuse = () => {
+    setFuseSideA(selected); setFuseSideB(fuseCandidate);
     setShowFuseAnim(true);
-    setTimeout(() => { setShowFuseAnim(false); setFusedCard(GOTENKS_CARD); setSelected(GOTENKS_CARD); setFuseCandidate(null); setAssembled(false); setTimeout(() => setAssembled(true), 100); }, 2600);
+    setTimeout(() => { setShowFuseAnim(false); setFusedCard(GOTENKS_CARD); setSelected(GOTENKS_CARD); setFuseCandidate(null); setAssembled(false); setTimeout(() => setAssembled(true), 100); }, 3200);
   };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#000a00,#001a00)", fontFamily: "'Courier New',monospace", display: "flex", flexDirection: "column" }}>
-      {/* フュージョン演出。2枚のカードが中央で重なり、光ってゴテンクスになります */}
-      {showFuseAnim && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "radial-gradient(ellipse at center,#1a0b2e 0%,#000 70%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20, overflow: "hidden" }}>
+      {/* フュージョン演出。2体のモデルが中央で重なって光り、
+          ゴテンクスのモデルが現れます。 */}
+      {showFuseAnim && fuseSideA && fuseSideB && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "radial-gradient(ellipse at center,#1a0b2e 0%,#000 70%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, overflow: "hidden" }}>
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} style={{ position: "absolute", top: "50%", left: "50%", width: "200vw", height: 2, background: "linear-gradient(90deg,transparent 35%,#a78bfa66,transparent 65%)", transform: `rotate(${i * 30}deg)`, transformOrigin: "0 50%", animation: "rayRotate 4s linear infinite" }} />
           ))}
           <div style={{ fontSize: 14, color: "#a78bfa", letterSpacing: 6, fontFamily: "monospace", animation: "pulse 0.3s infinite", zIndex: 1 }}>⚡ FUSION ⚡</div>
-          {/* カードそのものが寄ってきて重なります */}
-          <div style={{ position: "relative", width: 200, height: 200, zIndex: 1 }}>
-            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -65, animation: "fuseCardLeft 1.4s cubic-bezier(0.5,0,0.2,1) forwards" }}>
-              <CardDisplay card={selected} selected />
+          <div style={{ position: "relative", width: 300, height: 260, zIndex: 1 }}>
+            {/* 2体が左右から寄ってきて重なり、消えます */}
+            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -70, animation: "fuseCharLeft 1.5s cubic-bezier(0.5,0,0.2,1) forwards" }}>
+              <CharacterFighter card={fuseSideA} animState="idle" size={140} />
             </div>
-            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -65, animation: "fuseCardRight 1.4s cubic-bezier(0.5,0,0.2,1) forwards" }}>
-              <CardDisplay card={fuseCandidate} selected />
+            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -70, animation: "fuseCharRight 1.5s cubic-bezier(0.5,0,0.2,1) forwards" }}>
+              <CharacterFighter card={fuseSideB} animState="idle" size={140} />
             </div>
-            {/* 重なった瞬間の光 */}
-            <div style={{ position: "absolute", inset: -40, borderRadius: "50%", background: "radial-gradient(circle,#fff 0%,#a78bfa 35%,transparent 70%)", animation: "fuseFlash 0.9s ease-out 1.25s both", pointerEvents: "none" }} />
+            {/* 重なった瞬間の閃光 */}
+            <div style={{ position: "absolute", inset: -60, borderRadius: "50%", background: "radial-gradient(circle,#fff 0%,#a78bfa 35%,transparent 70%)", animation: "fuseFlash 1s ease-out 1.35s both", pointerEvents: "none" }} />
+            {/* 光のあとにゴテンクスが現れます */}
+            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -70, animation: "fuseResult 0.8s cubic-bezier(0.34,1.56,0.64,1) 1.9s both" }}>
+              <CharacterFighter card={GOTENKS_CARD} animState="idle" size={140} />
+            </div>
           </div>
-          <div style={{ fontSize: 36, fontWeight: "900", color: "#a78bfa", textShadow: "0 0 40px #a78bfa, 0 0 80px #7c3aed", animation: "scaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.6s both", letterSpacing: 4, zIndex: 1 }}>GOTENKS!</div>
+          <div style={{ fontSize: 36, fontWeight: "900", color: "#a78bfa", textShadow: "0 0 40px #a78bfa, 0 0 80px #7c3aed", animation: "scaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 2.1s both", letterSpacing: 4, zIndex: 1 }}>GOTENKS!</div>
         </div>
       )}
       <div style={{ padding: "16px 16px 8px", position: "relative", zIndex: 2 }}>
@@ -2720,9 +2729,10 @@ export default function App() {
         @keyframes dmgTextIn { 0%{opacity:0;transform:scale(0.4) translateY(10px)} 60%{opacity:1;transform:scale(1.05) translateY(-5px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes dragonBurstIn { 0%{opacity:0;transform:scale(0.2) rotate(-8deg)} 50%{opacity:1;transform:scale(1.08)} 100%{opacity:1;transform:scale(1)} }
         @keyframes cardEject { 0%{transform:translateY(105%)} 100%{transform:translateY(0)} }
-        @keyframes fuseCardLeft { 0%{transform:translateX(-130px) rotate(-14deg);opacity:1} 85%{transform:translateX(0) rotate(0deg);opacity:1} 100%{transform:translateX(0) rotate(0deg);opacity:0} }
-        @keyframes fuseCardRight { 0%{transform:translateX(130px) rotate(14deg);opacity:1} 85%{transform:translateX(0) rotate(0deg);opacity:1} 100%{transform:translateX(0) rotate(0deg);opacity:0} }
-        @keyframes fuseFlash { 0%{opacity:0;transform:scale(0.2)} 30%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(1.6)} }
+        @keyframes fuseCharLeft { 0%{transform:translateX(-90px) scale(1);opacity:1} 80%{transform:translateX(0) scale(1);opacity:1} 100%{transform:translateX(0) scale(1.1);opacity:0} }
+        @keyframes fuseCharRight { 0%{transform:translateX(90px) scale(1);opacity:1} 80%{transform:translateX(0) scale(1);opacity:1} 100%{transform:translateX(0) scale(1.1);opacity:0} }
+        @keyframes fuseFlash { 0%{opacity:0;transform:scale(0.2)} 30%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(1.7)} }
+        @keyframes fuseResult { 0%{opacity:0;transform:scale(0.55)} 100%{opacity:1;transform:scale(1)} }
         @keyframes clashFlashAnim { 0%{opacity:1} 100%{opacity:0} }
         @keyframes coreFlash { 0%{transform:translate(-50%,-50%) scale(0.7);opacity:0.8} 100%{transform:translate(-50%,-50%) scale(1.2);opacity:1} }
         @keyframes vsTextIn { 0%{opacity:0;transform:translate(-50%,-50%) scale(3) rotate(-4deg)} 60%{opacity:1;transform:translate(-50%,-50%) scale(0.95)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1)} }

@@ -384,9 +384,9 @@ export const CHARACTERS = {
   c_gotenks: {
     ...GOKU_BASE,
     name: "ゴテンクス",
-    model: `${R2}/No007/gotenks.glb`,
-    transformedModel:  `${R2}/No007/gotenks_ssj.glb`,
-    transformedModel2: `${R2}/No007/gotenks_ssj3.glb`,
+    model: `${R2}/%E3%82%B4%E3%83%86%E3%83%B3%E3%82%AF%E3%82%B9/gotenks.glb`,
+    transformedModel:  `${R2}/%E3%82%B4%E3%83%86%E3%83%B3%E3%82%AF%E3%82%B9/gotenks_ssj.glb`,
+    transformedModel2: `${R2}/%E3%82%B4%E3%83%86%E3%83%B3%E3%82%AF%E3%82%B9/gotenks_ssj3.glb`,
     motions: {
       ...GOKU_BASE.motions,
       ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
