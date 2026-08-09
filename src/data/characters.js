@@ -349,13 +349,15 @@ export const CHARACTERS = {
     aura: GOKU_AURA(AURA_PRESETS.gold),
   },
 
-  // ---------------- 敵役のベジータ（変身なし） ----------------
-  // 見た目とモーションは c011 と同じ。BattleStage3D 側で敵は
-  // facingYDeg = -90 になるので、自キャラと向かい合う形になります。
+  // ---------------- 敵役のベジータ ----------------
+  // 見た目・モーション・変身は c011（No.004 VegetaSS1）とまったく同じです。
+  // BattleStage3D 側で敵は facingYDeg = -90 になるので、自キャラと
+  // 向かい合う形になります。
   e004: {
     ...VEGETA_BASE,
     name: "ベジータ",
-    aura: { normal: { enabled: false }, transformed: { enabled: false }, reverted: { enabled: false } },
+    transformedModel: `${R2}/vegeta_ssj.glb`,
+    aura: GOKU_AURA(AURA_PRESETS.gold),
   },
 
   // ---------------- 以下は雛形（URLを入れれば有効になります） ----------------
