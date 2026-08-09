@@ -2391,7 +2391,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
             playerCardId={playerCard.id}
             enemyCardId={enemyData.id}
             playerAnim={dragonBurstPhase === "janken" && playerAnim !== MOTION.TRANSFORM ? MOTION.MELEE : playerAnim}
-            enemyAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : (enemyAnim === "hit" ? "hit" : enemyAnim === "attack" ? "attack" : enemyAnim === "win" ? "win" : enemyAnim === "lose" ? "lose" : "idle")}
+            enemyAnim={dragonBurstPhase === "janken" ? MOTION.MELEE : (["hit", "attack", "win", "lose", "down", "standUp"].includes(enemyAnim) ? enemyAnim : "idle")}
             playerTransformed={transformShown}
             playerTransformLevel={isSS3Char ? ss3Level : null}
             enemyTransformed={false}
