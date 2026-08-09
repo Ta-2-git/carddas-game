@@ -28,7 +28,7 @@ const IMG_CARD_GOKU = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/goku_
 const IMG_CARD_GOKU_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/71AAA89C-B4AF-423F-9BE4-D2CC74318FF0.png";
 const IMG_CARD_GOKU_SS3 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/8D809B5A-0E97-4B58-9458-4DE283208BB3.png";
 const IMG_CARD_VEGETA_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No004.png";
-const IMG_CARD_TRUNKS = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No005.jpg";
+const IMG_CARD_TRUNKS = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No005/No005.png";
 const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
 // カード排出演出で使う筐体の画像。
 // 排出口（黒い四角）の位置は画像を解析して求めた比率です（868×1811px）。
@@ -140,7 +140,7 @@ const CARDS = [
   { id: "c011", name: "VegetaSS1", rarity: "SR", hp: 2300, atk: 400, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#60a5fa", is3D: true, isVegetaSS1: true, img: IMG_CARD_VEGETA_SS1, ultimateName: "ファイナルフラッシュ", moveLabels: { rock: "ファイナルフラッシュ", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
   // No.005 トランクス（少年期） … 変身の仕組みはNo.002・No.004と同じ。
   // 必殺技はベジータと同じモーションで、エネルギー波は黄色（バスターキャノン）。
-  { id: "c012", name: "トランクス", rarity: "SR", hp: 2100, atk: 420, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#a78bfa", is3D: true, isTrunksSS1: true, img: IMG_CARD_TRUNKS, ultimateName: "バスターキャノン", moveLabels: { rock: "バスターキャノン", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
+  { id: "c012", name: "トランクス", rarity: "SR", hp: 1800, atk: 300, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#a78bfa", is3D: true, isTrunksSS1: true, img: IMG_CARD_TRUNKS, ultimateName: "バスターキャノン", moveLabels: { rock: "バスターキャノン", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
 ];
 
 const GOTENKS_CARD = {

@@ -309,8 +309,8 @@ export const CHARACTERS = {
   c012: {
     ...GOKU_BASE,
     name: "トランクス",
-    model: `${R2}/trunks.glb`,
-    transformedModel: `${R2}/trunks_ssj.glb`,
+    model: `${R2}/No005/trunks.glb`,
+    transformedModel: `${R2}/No005/trunks_ssj.glb`,
     motions: {
       ...GOKU_BASE.motions,
       ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
