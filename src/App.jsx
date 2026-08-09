@@ -31,8 +31,9 @@ const IMG_CARD_VEGETA_SS1 = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev
 const IMG_CARD_TRUNKS = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No005/No005.png";
 const IMG_CARD_GOTEN = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/No006/No006.png";
 // フュージョン後に出てくるゴテンクスのカードイラスト。
-// モデルと同じ「ゴテンクス」フォルダに置いてあります。
-const IMG_CARD_GOTENKS = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/%E3%82%B4%E3%83%86%E3%83%B3%E3%82%AF%E3%82%B9/gotenks.jpg";
+// モデルは「ゴテンクス」フォルダですが、イラストはルート直下に
+// gotenks.png という名前で置かれています。
+const IMG_CARD_GOTENKS = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/gotenks.png";
 const CARD_BACK_IMG = "https://pub-cc2639bfd1b440dbab289c6b875da6bb.r2.dev/card_back.png.PNG";
 // カード排出演出で使う筐体の画像。
 // 排出口（黒い四角）の位置は画像を解析して求めた比率です（868×1811px）。
