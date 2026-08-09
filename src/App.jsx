@@ -805,6 +805,14 @@ const DigitalMatrixBg = () => {
   );
 };
 
+// 画面の幅に対して何ピクセルでキャラを描くかを決めます。
+// 数値を直に書くと、狭いスマホでは枠からはみ出し、広い画面では
+// 小さいままになってしまうので、幅から計算して上下限で挟みます。
+const charSize = (ratio, min, max) => {
+  const w = typeof window !== "undefined" ? window.innerWidth : 375;
+  return Math.round(Math.max(min, Math.min(max, w * ratio)));
+};
+
 const DataAssembleChar = ({ card, assembled }) => {
   const [scanLines, setScanLines] = useState(0);
   useEffect(() => {
@@ -817,7 +825,7 @@ const DataAssembleChar = ({ card, assembled }) => {
   return (
     <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ position: "relative", filter: scanLines < 20 ? `brightness(${0.3 + scanLines * 0.035}) saturate(${scanLines * 0.05})` : "none", transition: "filter 0.1s" }}>
-        <CharacterFighter card={card} animState="idle" size={110} scale={0.85} />
+        <CharacterFighter card={card} animState="idle" size={charSize(0.44, 120, 190)} scale={0.85} />
       </div>
       <div style={{ marginTop: 8, fontFamily: "monospace", textAlign: "center", animation: scanLines >= 20 ? "fadeInUp 0.3s ease" : "none", opacity: scanLines >= 20 ? 1 : 0 }}>
         <div style={{ fontSize: 14, fontWeight: "900", color: "#00ff44", textShadow: "0 0 10px #00ff44", letterSpacing: 2 }}>{card.name}</div>
@@ -1023,14 +1031,14 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
         {fusedCard ? (
-          <div style={{ display: "flex", justifyContent: "center", paddingTop: 40, paddingBottom: 300 }}>
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 40, paddingBottom: 390 }}>
             <div>
               <div style={{ textAlign: "center", fontSize: 11, color: "#a78bfa", letterSpacing: 3, fontFamily: "monospace", marginBottom: 12, animation: "pulse 0.6s infinite" }}>⚡ FUSION COMPLETE ⚡</div>
               <CardDisplay card={fusedCard} selected small={false} />
             </div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 10, justifyItems: "center", paddingBottom: selected ? 300 : 60 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 10, justifyItems: "center", paddingBottom: selected ? 390 : 60 }}>
             {cards.map(card => {
               const isSelected = selected?.id === card.id;
               const isFuseCandidate = fuseCandidate?.id === card.id;
@@ -1045,7 +1053,7 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
           </div>
         )}
       </div>
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "linear-gradient(180deg,rgba(0,10,0,0.95) 0%,rgba(0,20,0,0.98) 100%)", borderTop: `2px solid ${canFuse ? "#a78bfa44" : "#00ff4444"}`, minHeight: selected ? 260 : 60, transition: "min-height 0.4s ease", overflow: "hidden" }}>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "linear-gradient(180deg,rgba(0,10,0,0.95) 0%,rgba(0,20,0,0.98) 100%)", borderTop: `2px solid ${canFuse ? "#a78bfa44" : "#00ff4444"}`, minHeight: selected ? 350 : 60, transition: "min-height 0.4s ease", overflow: "hidden" }}>
         <DigitalMatrixBg />
         {!selected && (<div style={{ padding: "16px", textAlign: "center", color: "#00ff4466", fontSize: 10, letterSpacing: 3, position: "relative", zIndex: 1 }}>▲ カードを選んでください ▲</div>)}
         {canFuse && (
@@ -1064,7 +1072,8 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
         )}
         {selected && !canFuse && (
           <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-end", gap: 20, position: "relative", zIndex: 1 }}>
-            <div style={{ flex: 1, display: "flex", justifyContent: "center" }}><DataAssembleChar card={selected} assembled={assembled} /></div>
+            {/* キャラを大きく見せたいので、モデル側に少し広く割り当てます */}
+            <div style={{ flex: 1.35, display: "flex", justifyContent: "center", minWidth: 0 }}><DataAssembleChar card={selected} assembled={assembled} /></div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
               {selected.canFuse && (<div style={{ fontSize: 9, color: "#a78bfa", fontFamily: "monospace", border: "1px solid #a78bfa44", borderRadius: 6, padding: "4px 8px", background: "#a78bfa11" }}>⚡ {CARDS.find(c => c.id === selected.fuseWith)?.name} を選ぶとフュージョン！</div>)}
               <button onClick={() => onSelect(selected)} style={{ padding: "14px 16px", background: "linear-gradient(135deg,#00ff44,#00cc33)", border: "none", borderRadius: 8, color: "#000", fontSize: 14, fontWeight: "900", cursor: "pointer", fontFamily: "monospace", boxShadow: "0 4px 20px #00ff4488, 0 0 30px #00ff4433", letterSpacing: 1, animation: "btnGlow 1.5s ease-in-out infinite alternate" }}>▶ バトルへ！</button>
@@ -2581,7 +2590,7 @@ const VSCutScreen = ({ playerCard, enemyData, onDone }) => {
           <div style={{ fontWeight: "900", fontSize: 13, color: "#fff", textShadow: "0 0 10px #60a5fa, 2px 2px 0 #000", letterSpacing: 1, marginTop: 2 }}>{playerCard.name}</div>
         </div>
         <div style={{ width: "100%", display: "flex", justifyContent: "center", alignItems: "flex-end", paddingBottom: "8%", animation: "vsCharIn 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.2s both", flex: 1, paddingTop: "18%" }}>
-          <CharacterFighter card={playerCard} animState="idle" size={140} scale={0.85} />
+          <CharacterFighter card={playerCard} animState="idle" size={charSize(0.46, 140, 230)} scale={0.85} />
         </div>
       </div>
       <div style={{ width: 3, flexShrink: 0, zIndex: 5, background: "linear-gradient(180deg,transparent 0%,#fff 20%,#fff 80%,transparent 100%)", boxShadow: "0 0 18px 4px rgba(255,255,255,0.7)" }} />
@@ -2591,7 +2600,7 @@ const VSCutScreen = ({ playerCard, enemyData, onDone }) => {
           <div style={{ fontWeight: "900", fontSize: 13, color: "#fff", textShadow: "0 0 10px #f87171, 2px 2px 0 #000", letterSpacing: 1, marginTop: 2 }}>{enemyData.name}</div>
         </div>
         <div style={{ width: "100%", display: "flex", justifyContent: "center", alignItems: "flex-end", paddingBottom: "8%", animation: "vsEnemyIn 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.3s both", flex: 1, paddingTop: "18%", transform: "scaleX(-1)" }}>
-          <CharacterFighter card={enemyData} animState="idle" size={140} />
+          <CharacterFighter card={enemyData} animState="idle" size={charSize(0.46, 140, 230)} />
         </div>
       </div>
       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontWeight: "900", fontSize: 68, color: "#fff", textShadow: "0 0 28px #fff, 4px 4px 0 #000, -2px -2px 0 #000", letterSpacing: 6, fontFamily: "'Arial Black','Impact',sans-serif", zIndex: 10, animation: "vsTextIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both", whiteSpace: "nowrap" }}>VS</div>

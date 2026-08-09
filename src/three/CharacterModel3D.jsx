@@ -38,8 +38,20 @@ export default function CharacterModel3D({
     const scene = new THREE.Scene();
     const cam = cfg.camera || {};
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-    camera.position.set(isEnemy ? -0.3 : 0.3, cam.cameraY ?? 1.2, cam.cameraZ ?? 4.0);
-    camera.lookAt(0, cam.lookAtY ?? 0.8, 0);
+
+    // 単体表示は、キャラの上下に余白が出すぎて小さく見えていました。
+    // 全身がぎりぎり収まるところまでカメラを寄せます。
+    //   ・縦に見える範囲を VIEW_H に固定し、そこから距離を逆算します
+    //   ・一番背の高い悟空（足元0〜頭1.70）でも収まるよう 1.90 にしています
+    //     （ゴテンクスなど小柄なキャラは約1.25なので余裕があります）
+    //   ・目線の高さは体の中心（VIEW_Hの半分あたり）に合わせます
+    // characters.js の cameraZ / cameraY はここでは使いません。
+    // あちらは対戦画面（BattleStage3D）用の値です。
+    const VIEW_H = 1.90;
+    const centerY = 0.90;                       // 足元(y=0)の下に0.05だけ余白が残ります
+    const dist = (VIEW_H / 2) / Math.tan((45 * Math.PI) / 180 / 2);
+    camera.position.set(isEnemy ? -0.3 : 0.3, centerY, dist);
+    camera.lookAt(0, centerY, 0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const dir = new THREE.DirectionalLight(0xffffff, 1.2);
