@@ -147,6 +147,12 @@ const GOKU_BASE = {
       transform: { file: `${R2}/Goku_変身.fbx`, loop: false, trimEnd: 5.5, duration: 2.8, faceCamera: true },
 
       hitByMelee:    { file: `${R2}/Goku_Receive.fbx`, loop: false },
+
+      // 倒れたまま起き上がらない用。被弾モーションの「地面に倒れている」
+      // ところ（素材3.7秒）で打ち切り、hold で最後の姿勢のまま止めます。
+      down:    { file: `${R2}/Goku_Receive.fbx`, loop: false, trimEnd: 3.7, hold: true },
+      // 復活したときの起き上がり。被弾モーションの4.0秒以降だけを使います。
+      standUp: { file: `${R2}/Goku_Receive.fbx`, loop: false, trimStart: 4.0 },
       hitByKiBlast:  { file: "", loop: false },
       hitByUltimate: { file: "", loop: false },
     },
@@ -368,18 +374,44 @@ export const CHARACTERS = {
     },
   },
 
+  // ---------------- ゴテンクス（フュージョン専用・2段階変身） ----------------
+  //  トランクスと悟天のカードを続けて選ぶとフュージョンして出てきます。
+  //  段階は No.003 GokuSS3 と同じ 通常 → スーパーサイヤ人 → スーパーサイヤ人3。
+  //  必殺技はベジータ・トランクスと同じモーションで、エネルギー波は
+  //  「超かめはめ波」の大きい動画を黄色に塗り替えて使います。
+  //  身長は悟空を170cmとしたとき130cmになるよう、モデル側で倍率を
+  //  調整済みです（3段階とも同じ 0.00803882 なので体格は変わりません）。
   c_gotenks: {
+    ...GOKU_BASE,
     name: "ゴテンクス",
-    model: "",
-    fps: 30,
-    camera: { cameraY: 1.2, cameraZ: 3.6, lookAtY: 0.8, rotationY: 0 },
-    motions: {},
-    kiBlast:  { model: "", color: "#c4b5fd", effect: "sphere", scale: 0.3, speed: 6 },
-    ultimate: { model: "", color: "#a78bfa", effect: "beam",   scale: 1.1, speed: 9 },
+    model: `${R2}/No007/gotenks.glb`,
+    transformedModel:  `${R2}/No007/gotenks_ssj.glb`,
+    transformedModel2: `${R2}/No007/gotenks_ssj3.glb`,
+    motions: {
+      ...GOKU_BASE.motions,
+      ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
+    },
+    // 通常・スーパーサイヤ人・スーパーサイヤ人3 のどの段階でも
+    // 「超かめはめ波」の大きいエネルギー波を黄色にして使います。
+    ultimate: {
+      ...GOKU_BASE.ultimate,
+      color: "#ffe14d",
+      videoTint: "#ffd633",
+      videoTintAmount: 1.0,
+      video: "/kamehameha_super.mp4",
+      videoDuration: 2.58,
+      videoHeightMul: 1.5,
+      videoStartAt: 0.035,
+    },
     aura: {
-      normal:      { enabled: true, ...AURA_PRESETS.purple, scale: 1.0, opacity: 0.5 },
-      transformed: { enabled: true, ...AURA_PRESETS.yellow, scale: 1.25, opacity: 1.0, startFrame: 36 },
-      reverted:    { enabled: true, ...AURA_PRESETS.purple, scale: 1.0, opacity: 0.5 },
+      ...GOKU_AURA(AURA_PRESETS.gold),
+      transformed2: {
+        enabled: true, ...AURA_PRESETS.gold,
+        color: "#ffaa00",
+        scale: 1.5, opacity: 0.90, yOffset: 0, startFrame: 48, thunder: true,
+        backIntensity: 0.85, frontIntensity: 0.13,
+        boltIntensity: 0.7, boltLayers: 2,
+      },
     },
   },
 

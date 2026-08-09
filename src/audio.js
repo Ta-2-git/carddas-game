@@ -233,11 +233,14 @@ export function preloadAudio(list) {
 }
 
 // ---- ループする効果音 --------------------------------------
-export function startLoop(name) {
+export function startLoop(name, restart = false) {
   const spec = LOOP_SPECS[name];
   const el = loopFor(name);
   if (!spec || !el) return;
-  if (!el.paused) return; // すでに鳴っています
+  // restart は「もう鳴っていても頭から鳴らし直す」指定です。
+  // スーパーサイヤ人3へ上がるときは既にオーラ音が鳴っているので、
+  // これが無いと変身の瞬間の音が鳴りません。
+  if (!el.paused && !restart) return;
   try { el.currentTime = 0; } catch { /* 無視 */ }
   el.volume = spec.volume;
   const p = el.play();
@@ -250,7 +253,7 @@ export function stopLoop(name) {
   try { el.pause(); el.currentTime = 0; } catch { /* 無視 */ }
 }
 
-export const startAuraLoop = () => startLoop("aura");
+export const startAuraLoop = (restart = false) => startLoop("aura", restart);
 export const stopAuraLoop = () => stopLoop("aura");
 export const startRouletteLoop = () => startLoop("rouletteSpin");
 export const stopRouletteLoop = () => stopLoop("rouletteSpin");

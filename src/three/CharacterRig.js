@@ -692,12 +692,16 @@ export default class CharacterRig {
       // startFrame を何フレームにしてもすぐ切り替わってしまいます。
       this._pendingTransformSwap = true;
       this._pendingSwapSince = now();
+      // 前の変身の経過時間が残っていると、2回目の変身で
+      // モーションが始まる前に切り替わってしまいます。
+      this.transformElapsed = -1;
     }
   }
 
   /** オーラとモデルを、いまの変身段階の見た目に切り替えます */
   _doTransformSwap() {
     this._pendingTransformSwap = false;
+    this.transformElapsed = -1;   // 切り替え済み。二重に走らせません
     this.transformed = true;
     this.auraMode = this._wantedAuraMode();
     this._applyAuraVisibility();

@@ -141,18 +141,22 @@ const CARDS = [
   { id: "c011", name: "VegetaSS1", rarity: "SR", hp: 2300, atk: 400, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#60a5fa", is3D: true, isVegetaSS1: true, img: IMG_CARD_VEGETA_SS1, ultimateName: "ファイナルフラッシュ", moveLabels: { rock: "ファイナルフラッシュ", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
   // No.005 トランクス（少年期） … 変身の仕組みはNo.002・No.004と同じ。
   // 必殺技はベジータと同じモーションで、エネルギー波は黄色（バスターキャノン）。
-  { id: "c012", name: "トランクス", rarity: "SR", hp: 1800, atk: 300, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#a78bfa", is3D: true, isTrunksSS1: true, img: IMG_CARD_TRUNKS, ultimateName: "バスターキャノン", moveLabels: { rock: "バスターキャノン", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
+  { id: "c012", name: "トランクス", rarity: "SR", hp: 1800, atk: 300, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#a78bfa", is3D: true, isTrunksSS1: true, canFuse: true, fuseWith: "c013", img: IMG_CARD_TRUNKS, ultimateName: "バスターキャノン", moveLabels: { rock: "バスターキャノン", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
   // No.006 悟天 … 必殺技は悟空と同じかめはめ波。変身の仕組みはNo.002と同じ。
-  { id: "c013", name: "悟天", rarity: "SR", hp: 1700, atk: 330, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#fbbf24", is3D: true, isGotenSS1: true, img: IMG_CARD_GOTEN, ultimateName: "かめはめ波", moveLabels: { rock: "かめはめ波", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
+  { id: "c013", name: "悟天", rarity: "SR", hp: 1700, atk: 330, rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch", color: "#fbbf24", is3D: true, isGotenSS1: true, canFuse: true, fuseWith: "c012", img: IMG_CARD_GOTEN, ultimateName: "かめはめ波", moveLabels: { rock: "かめはめ波", scissors: "回転蹴り", paper: "正拳突き" }, description: "じゃんけんに勝つとスーパーサイヤ人へ！HP1.5倍・ATK1.2倍。攻撃を受けると元に戻る。" },
 ];
 
+// フュージョンでしか手に入らないカード。カード一覧には出しません。
+// 変身の仕組みは No.003 GokuSS3 と同じ2段階（倍率も同じ）です。
 const GOTENKS_CARD = {
   id: "c_gotenks", name: "ゴテンクス", rarity: "SSR",
-  hp: 3000, atk: 400,
+  hp: 3000, atk: 500,
   rock: "rock_kamehameha", scissors: "scissors_kick", paper: "paper_punch",
-  color: "#a78bfa", bodyColor: "#7c3aed", hairColor: "#4c1d95",
-  isGotenks: true,
-  description: "フュージョン！ジャンケン勝利でSSJ→SSJ3へ変身！負けると1段階ずつ解除。",
+  color: "#a78bfa",
+  is3D: true, isSS3Char: true,
+  ultimateName: "スーパーゴーストかめはめ波",
+  moveLabels: { rock: "スーパーゴーストかめはめ波", scissors: "回転蹴り", paper: "正拳突き" },
+  description: "フュージョン！じゃんけん勝利でスーパーサイヤ人→スーパーサイヤ人3へ！負けると1段階戻る。",
 };
 
 // 先頭が既定の対戦相手です（DEFAULT_ENEMY_ID で固定して出します）。
@@ -973,20 +977,30 @@ const CardSelectScreen = ({ ownedCards, onSelect, onBack }) => {
 
   const handleFuse = () => {
     setShowFuseAnim(true);
-    setTimeout(() => { setShowFuseAnim(false); setFusedCard(GOTENKS_CARD); setSelected(GOTENKS_CARD); setFuseCandidate(null); setAssembled(false); setTimeout(() => setAssembled(true), 100); }, 2000);
+    setTimeout(() => { setShowFuseAnim(false); setFusedCard(GOTENKS_CARD); setSelected(GOTENKS_CARD); setFuseCandidate(null); setAssembled(false); setTimeout(() => setAssembled(true), 100); }, 2600);
   };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#000a00,#001a00)", fontFamily: "'Courier New',monospace", display: "flex", flexDirection: "column" }}>
+      {/* フュージョン演出。2枚のカードが中央で重なり、光ってゴテンクスになります */}
       {showFuseAnim && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-          <div style={{ fontSize: 14, color: "#a78bfa", letterSpacing: 4, fontFamily: "monospace", animation: "pulse 0.3s infinite" }}>⚡ FUSION ⚡</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-            <div style={{ animation: "fusionCharLeft 1.5s ease forwards" }}><StickmanFighter card={selected} size={80} state="attack" /></div>
-            <div style={{ fontSize: 32, color: "#fbbf24", animation: "pulse 0.2s infinite", margin: "0 8px" }}>✦</div>
-            <div style={{ animation: "fusionCharRight 1.5s ease forwards" }}><StickmanFighter card={fuseCandidate} size={80} state="attack" /></div>
+        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "radial-gradient(ellipse at center,#1a0b2e 0%,#000 70%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20, overflow: "hidden" }}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} style={{ position: "absolute", top: "50%", left: "50%", width: "200vw", height: 2, background: "linear-gradient(90deg,transparent 35%,#a78bfa66,transparent 65%)", transform: `rotate(${i * 30}deg)`, transformOrigin: "0 50%", animation: "rayRotate 4s linear infinite" }} />
+          ))}
+          <div style={{ fontSize: 14, color: "#a78bfa", letterSpacing: 6, fontFamily: "monospace", animation: "pulse 0.3s infinite", zIndex: 1 }}>⚡ FUSION ⚡</div>
+          {/* カードそのものが寄ってきて重なります */}
+          <div style={{ position: "relative", width: 200, height: 200, zIndex: 1 }}>
+            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -65, animation: "fuseCardLeft 1.4s cubic-bezier(0.5,0,0.2,1) forwards" }}>
+              <CardDisplay card={selected} selected />
+            </div>
+            <div style={{ position: "absolute", top: 0, left: "50%", marginLeft: -65, animation: "fuseCardRight 1.4s cubic-bezier(0.5,0,0.2,1) forwards" }}>
+              <CardDisplay card={fuseCandidate} selected />
+            </div>
+            {/* 重なった瞬間の光 */}
+            <div style={{ position: "absolute", inset: -40, borderRadius: "50%", background: "radial-gradient(circle,#fff 0%,#a78bfa 35%,transparent 70%)", animation: "fuseFlash 0.9s ease-out 1.25s both", pointerEvents: "none" }} />
           </div>
-          <div style={{ fontSize: 36, fontWeight: "900", color: "#a78bfa", textShadow: "0 0 40px #a78bfa, 0 0 80px #7c3aed", animation: "scaleIn 0.5s ease 1.2s both", letterSpacing: 4 }}>GOTENKS!</div>
+          <div style={{ fontSize: 36, fontWeight: "900", color: "#a78bfa", textShadow: "0 0 40px #a78bfa, 0 0 80px #7c3aed", animation: "scaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.6s both", letterSpacing: 4, zIndex: 1 }}>GOTENKS!</div>
         </div>
       )}
       <div style={{ padding: "16px 16px 8px", position: "relative", zIndex: 2 }}>
@@ -1098,7 +1112,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const startsWithSSJ = supportCard?.effect === "transform_start" && playerCard.isGotenks;
   // GokuSS1 / GokuSS3 も「怒り」でスーパーサイヤ人スタートにします
   const startsWithSS1 = supportCard?.effect === "transform_start" && (playerCard.isGokuSS1 || playerCard.isVegetaSS1);
-  const startsWithSS3 = supportCard?.effect === "transform_start" && playerCard.isGokuSS3;
+  const startsWithSS3 = supportCard?.effect === "transform_start" && (playerCard.isGokuSS3 || playerCard.isSS3Char);
   const startsWithBoost = supportCard?.effect === "boost_stats";
   const boostedHp = startsWithBoost ? playerCard.hp + (supportCard.hpBoost || 0) : playerCard.hp;
   const boostedAtk = startsWithBoost ? playerCard.atk + (supportCard.atkBoost || 0) : playerCard.atk;
@@ -1171,7 +1185,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   // ---- GokuSS3（2段階変身。基本の仕組みはゴテンクスと同じ）----
   //   0=通常 / 1=スーパーサイヤ人 / 2=スーパーサイヤ人3
   //   じゃんけんに勝つと1段階上がり（2段階目は2連勝が条件）、負けると1段階戻ります。
-  const isSS3Char = Boolean(playerCard.isGokuSS3);
+  const isSS3Char = Boolean(playerCard.isGokuSS3 || playerCard.isSS3Char);
   const SS3_MUL = [{ hp: 1, atk: 1 }, { hp: 1.5, atk: 1.2 }, { hp: 3, atk: 2 }];
   const [ss3Level, setSS3Level] = useState(0);
   const ss3LevelRef = useRef(0);
@@ -1250,6 +1264,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
   const [saiyanPowerActive, setSaiyanPowerActive] = useState(false);
   const saiyanPowerActiveRef = useRef(false);
   const saiyanUsedRef = useRef(false);
+  const senseUsedRef = useRef(false);      // 戦いのセンス（1回限り）
+  const enemySenseUsedRef = useRef(false);
   const [barrierReady, setBarrierReady] = useState(evEffect === "ki_barrier");
   const barrierReadyRef = useRef(evEffect === "ki_barrier");
   // 発動時のカットイン（イベントカード共通の演出を使います）
@@ -1747,6 +1763,25 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     return cur >= 2 ? 0 : cur + 1;
   }, [isSS3Char]);
 
+  /**
+   * HPバーを fromHp から toHp まで動かします。
+   * 減るときも増えるときも同じ速さ（1.5秒）で動かすので、
+   * 回復もダメージと同じ見え方になります。
+   */
+  const drainHp = useCallback((target, fromHp, toHp, onDone) => {
+    const dmg = fromHp - toHp;
+    if (dmg === 0) { onDone(); return; }
+    const startTime = performance.now();
+    const setter = target === "player" ? setPlayerDisplayHp : setEnemyDisplayHp;
+    const tick = (now) => {
+      const progress = Math.min(1, (now - startTime) / 1500);
+      setter(Math.round(fromHp - dmg * progress));
+      if (progress < 1) drainRafRef.current = requestAnimationFrame(tick);
+      else { setter(toHp); onDone(); }
+    };
+    drainRafRef.current = requestAnimationFrame(tick);
+  }, []);
+
   // ---- イベント「サイヤ人の力」: 連敗でHP回復＋ATK2倍（攻撃したら戻る）----
   const applySaiyanPower = useCallback(() => {
     if (saiyanUsedRef.current) return;
@@ -1757,13 +1792,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     const to = Math.min(playerMaxHpRef.current, from + heal);
     setPlayerHp(to); playerHpRef.current = to;
     playSe(SE.scouter);
-    animateValue("dispHp", from, to, 900, setPlayerDisplayHp);
+    drainHp("player", from, to, () => {});
     const mul = eventCard?.atkMul || 2;
     const na = Math.floor(playerAtkRef.current * mul);
     setPlayerCurrentAtk(na); playerAtkRef.current = na;
     setBattleLog(l => [...l, `サイヤ人の力！ HP${to - from}回復・ATK${mul}倍！`]);
     cutInCard();
-  }, [eventCard, animateValue, cutInCard]);
+  }, [eventCard, drainHp, cutInCard]);
 
   // 攻撃を1回行ったらATKを元に戻します
   const revertSaiyanPower = useCallback(() => {
@@ -1785,7 +1820,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     loseStreakRef.current += 1;
     const need = eventCard?.loseStreak || 0;
     if (need > 0 && loseStreakRef.current >= need) {
-      if (evEffect === "reverse_result") {
+      if (evEffect === "reverse_result" && !senseUsedRef.current) {
+        senseUsedRef.current = true;
         loseStreakRef.current = 0;
         reversedThisRoundRef.current = true;
         setBattleLog(l => [...l, `戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
@@ -1805,12 +1841,12 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     const from = enemyHpRef.current;
     const to = Math.min(enemyData.hp, from + heal);
     setEnemyHp(to); enemyHpRef.current = to;
-    animateValue("eDispHp", from, to, 900, setEnemyDisplayHp);
+    drainHp("enemy", from, to, () => {});
     enemySaiyanMulRef.current = enemyEventCard?.atkMul || 2;
     setEnemySaiyanActive(true);
     setBattleLog(l => [...l, `${enemyData.name}のサイヤ人の力！ HP${to - from}回復・ATK${enemySaiyanMulRef.current}倍！`]);
     cutInCard(enemyEventCard, "enemy");
-  }, [enemyEventCard, enemyData, animateValue, cutInCard]);
+  }, [enemyEventCard, enemyData, drainHp, cutInCard]);
 
   /** 敵が1回攻撃したらATKを元に戻します */
   const revertEnemySaiyanPower = useCallback(() => {
@@ -1834,7 +1870,8 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     if (need > 0 && enemyLoseStreakRef.current >= need) {
       // 自分の「戦いのセンス」で既にひっくり返っているなら、
       // ここでさらに戻すと結果が元通りになってしまうので発動させません
-      if (enemyEv === "reverse_result" && !reversedThisRoundRef.current) {
+      if (enemyEv === "reverse_result" && !reversedThisRoundRef.current && !enemySenseUsedRef.current) {
+        enemySenseUsedRef.current = true;
         enemyLoseStreakRef.current = 0;
         setBattleLog(l => [...l, `${enemyData.name}の戦いのセンス！ じゃんけんの勝敗が逆転した！`]);
         cutInCard(enemyEventCard, "enemy");
@@ -1971,14 +2008,6 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     }, 600);
   }, [phase, dragonBurstPhase, turn, startDragonBurst, applyLoseStreak, applyEnemyLoseStreak, addKi, afterJankenShown]);
 
-  const drainHp = useCallback((target, fromHp, toHp, onDone) => {
-    const dmg = fromHp - toHp;
-    if (dmg <= 0) { onDone(); return; }
-    const startTime = performance.now();
-    const setter = target === "player" ? setPlayerDisplayHp : setEnemyDisplayHp;
-    const tick = (now) => { const progress = Math.min(1, (now - startTime) / 1500); setter(Math.max(toHp, fromHp - dmg * progress)); if (progress < 1) drainRafRef.current = requestAnimationFrame(tick); else { setter(toHp); onDone(); } };
-    drainRafRef.current = requestAnimationFrame(tick);
-  }, []);
 
   // 予約しておいた弾を実際に発射し、着弾を予約します
   /** 「あきらめる」… その場で敗北にしてリザルトへ進みます */
@@ -1990,7 +2019,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
     setBattleLog(l => [...l, `あきらめた…`]);
     setPhase("result");
     setPlayerHp(0); playerHpRef.current = 0; setPlayerDisplayHp(0);
-    setPlayerAnim("lose"); setEnemyAnim("win");
+    setPlayerAnim("down"); setEnemyAnim("win");
     setTimeout(() => onEnd(false), 1200);
   }, [onEnd]);
 
@@ -2027,17 +2056,25 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
         barrierReadyRef.current = false; setBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `気のバリア！ ${dmg}ダメージを無効化した！`]);
-        // ここでカットインを出すと、倒れて起き上がるモーションが隠れてしまうので
-        // 出しません。発動は「0ダメージ」の表示とバトルログで分かります。
+        cutInCard(eventCard, "player");
       }
       // 敵側の「気のバリア」
       if (hitTarget === "enemy" && enemyBarrierReadyRef.current && dmg >= (enemyEventCard?.threshold || 800)) {
         enemyBarrierReadyRef.current = false; setEnemyBarrierReady(false);
         dealt = 0; blocked = true;
         setBattleLog(l => [...l, `${enemyData.name}の気のバリア！ ${dmg}ダメージを無効化した！`]);
+        cutInCard(enemyEventCard, "enemy");
       }
       const newHp = Math.max(0, fromHp - dealt);
-      setDmgText({ amount: dealt, target: hitTarget, blocked });
+      // 気のバリアのときは、カードのカットインを見せ終わってから
+      // 「0ダメージ」を出します（同時だとカットインに隠れます）。
+      const CUTIN_MS = 2400;
+      if (blocked) setTimeout(() => setDmgText({ amount: dealt, target: hitTarget, blocked }), CUTIN_MS);
+      else setDmgText({ amount: dealt, target: hitTarget, blocked });
+      // 倒れたまま起き上がらないように、致命傷なら今すぐ倒れる方のモーションへ
+      if (newHp <= 0) {
+        if (hitTarget === "enemy") setEnemyAnim("down"); else setPlayerAnim("down");
+      }
       // サポート「サイヤ人の力」: 一度攻撃したらATKは元に戻ります
       if (attacker === "player") setTimeout(() => revertSaiyanPower(), 1200);
       else setTimeout(() => revertEnemySaiyanPower(), 1200);
@@ -2061,13 +2098,14 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
               if (eCanRevive) {
                 enemyRevivedRef.current = true;
                 const reviveHp = Math.floor(enemyData.hp / 2);
-                setEnemyHp(reviveHp); enemyHpRef.current = reviveHp; setEnemyDisplayHp(reviveHp);
+                setEnemyHp(reviveHp); enemyHpRef.current = reviveHp;
+                drainHp("enemy", 0, reviveHp, () => {});
                 setBattleLog(l => [...l, `${enemyData.name}のナメック星人の力発動！ HP ${reviveHp} 回復！`]);
                 cutInCard(enemyEventCard, "enemy");
-                setPlayerAnim("idle"); setEnemyAnim("idle");
+                setPlayerAnim("idle"); setEnemyAnim("standUp");
                 setDamageNum(null); setCurrentMove(null);
                 nextTurn(isKaioken, turn + 1, hitTarget === "player");
-              } else { setPlayerAnim("win"); setEnemyAnim("lose"); setTimeout(() => onEnd(true), 1500); setPhase("result"); }
+              } else { setPlayerAnim("win"); setEnemyAnim("down"); setTimeout(() => onEnd(true), 2600); setPhase("result"); }
             }
             else {
               const canRevive = eventCard?.effect === "revive_half" && !eventCardUsedRef.current && turn <= 5;
@@ -2075,12 +2113,13 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
                 eventCardUsedRef.current = true; setCutInEventCard(eventCard); setCutInOwner("player"); setShowEventCutIn(true);
                 setEventCutInDone(() => () => {
                   const reviveHp = Math.floor(playerCard.hp / 2);
-                  setPlayerHp(reviveHp); playerHpRef.current = reviveHp; setPlayerDisplayHp(reviveHp);
+                  setPlayerHp(reviveHp); playerHpRef.current = reviveHp;
+                  drainHp("player", 0, reviveHp, () => {});
                   setBattleLog(l => [...l, `ナメック星人の力発動！ HP ${reviveHp} 回復！`]);
-                  setPlayerAnim("idle"); setEnemyAnim("idle");
+                  setPlayerAnim("standUp"); setEnemyAnim("idle");
                   setDamageNum(null); setCurrentMove(null); nextTurn(isKaioken, turn + 1, hitTarget === "player");
                 });
-              } else { setEnemyAnim("win"); setPlayerAnim("lose"); setTimeout(() => onEnd(false), 1500); setPhase("result"); }
+              } else { setEnemyAnim("win"); setPlayerAnim("down"); setTimeout(() => onEnd(false), 2600); setPhase("result"); }
             }
           } else {
             if (isGotenks && attacker === "enemy" && gotenksLevelRef.current > 0) {
@@ -2116,7 +2155,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
             if (turnWait > 0) setTimeout(goNext, turnWait); else goNext();
           }
         });
-      }, 2000);
+      }, blocked ? 2000 + CUTIN_MS : 2000);
     };
     if (needsDash) {
       setPlayerAnim("dash"); setEnemyAnim("idle"); setPlayerOffset(160);
@@ -2352,7 +2391,7 @@ const BattleScreen = ({ playerCard, enemyData, supportCard, eventCard, enemyEven
             shot={shot}
             onShotHit={() => setShot(null)}
             onPlayerShot={handlePlayerShot}
-            onPlayerTransform={() => startAuraLoop()}
+            onPlayerTransform={() => startAuraLoop(true)}
           />
 
           {clashSparks && (dragonBurstPhase === "janken" || dragonBurstPhase === "clash") && (
@@ -2681,6 +2720,9 @@ export default function App() {
         @keyframes dmgTextIn { 0%{opacity:0;transform:scale(0.4) translateY(10px)} 60%{opacity:1;transform:scale(1.05) translateY(-5px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes dragonBurstIn { 0%{opacity:0;transform:scale(0.2) rotate(-8deg)} 50%{opacity:1;transform:scale(1.08)} 100%{opacity:1;transform:scale(1)} }
         @keyframes cardEject { 0%{transform:translateY(105%)} 100%{transform:translateY(0)} }
+        @keyframes fuseCardLeft { 0%{transform:translateX(-130px) rotate(-14deg);opacity:1} 85%{transform:translateX(0) rotate(0deg);opacity:1} 100%{transform:translateX(0) rotate(0deg);opacity:0} }
+        @keyframes fuseCardRight { 0%{transform:translateX(130px) rotate(14deg);opacity:1} 85%{transform:translateX(0) rotate(0deg);opacity:1} 100%{transform:translateX(0) rotate(0deg);opacity:0} }
+        @keyframes fuseFlash { 0%{opacity:0;transform:scale(0.2)} 30%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(1.6)} }
         @keyframes clashFlashAnim { 0%{opacity:1} 100%{opacity:0} }
         @keyframes coreFlash { 0%{transform:translate(-50%,-50%) scale(0.7);opacity:0.8} 100%{transform:translate(-50%,-50%) scale(1.2);opacity:1} }
         @keyframes vsTextIn { 0%{opacity:0;transform:translate(-50%,-50%) scale(3) rotate(-4deg)} 60%{opacity:1;transform:translate(-50%,-50%) scale(0.95)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1)} }
