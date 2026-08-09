@@ -298,6 +298,34 @@ export const CHARACTERS = {
     aura: GOKU_AURA(AURA_PRESETS.gold),
   },
 
+  // ---------------- No.005 トランクス（少年期） ----------------
+  //  素体とモーションは他キャラと共通。必殺技だけベジータと同じ
+  //  ファイナルフラッシュのモーションを使い、エネルギー波を黄色にします。
+  //  トランクスのモデルは Blender で悟空に合わせて調整済みなので、
+  //  ベジータのような頭の向きの補正（boneFix）は要りません
+  //  （実測した頭のズレは 通常0.8度 / スーパーサイヤ人7.3度）。
+  //  身長は悟空を170cmとしたとき130cmになるよう、モデル側の倍率で
+  //  調整してあります（0.01 → 0.0087118）。
+  c012: {
+    ...GOKU_BASE,
+    name: "トランクス",
+    model: `${R2}/trunks.glb`,
+    transformedModel: `${R2}/trunks_ssj.glb`,
+    motions: {
+      ...GOKU_BASE.motions,
+      ultimate: { file: `${R2}/Vegeta_FinalFlash.fbx`, loop: false, trimEnd: 2.6, duration: 2.2, faceCamera: true, shotAt: 2.0 },
+    },
+    // バスターキャノン。かめはめ波の動画を流用し、色を黄色に塗り替えます。
+    // ベジータの金色（#ffb300）より黄色寄りにして見分けがつくようにしました。
+    ultimate: {
+      ...GOKU_BASE.ultimate,
+      color: "#ffe14d",
+      videoTint: "#ffd633",
+      videoTintAmount: 1.0,
+    },
+    aura: GOKU_AURA(AURA_PRESETS.gold),
+  },
+
   // ---------------- 敵役のベジータ（変身なし） ----------------
   // 見た目とモーションは c011 と同じ。BattleStage3D 側で敵は
   // facingYDeg = -90 になるので、自キャラと向かい合う形になります。
